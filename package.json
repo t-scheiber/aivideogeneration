@@ -1,0 +1,41 @@
+{
+  "name": "ai-video-generation-app",
+  "version": "1.0.0",
+  "description": "A comprehensive Next.js application for generating high-quality AI videos with multiple providers",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "keywords": ["ai", "video", "generation", "nextjs", "veo3", "runwayml", "luma", "openai"],
+  "author": "AI Video Generation App",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/ai-video-generation-app.git"
+  },
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@google-cloud/vertexai": "^1.10.0",
+    "next": "15.5.4",
+    "next-auth": "^5.0.0-beta.29",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.46.0",
+    "@typescript-eslint/parser": "^8.46.0",
+    "autoprefixer": "^10.4.0",
+    "eslint": "^9.37.0",
+    "eslint-config-next": "15.5.4",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5"
+  }
+}
