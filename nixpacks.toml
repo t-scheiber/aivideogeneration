@@ -12,7 +12,7 @@ cmds = [
 ]
 
 [start]
-cmd = "bunx next start -H 0.0.0.0"
+cmd = "bunx next start -H 0.0.0.0 -p ${PORT:-3000}"
 
 [variables]
 NODE_ENV = "production"
