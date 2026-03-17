@@ -58,3 +58,8 @@ credentials/
 # OS
 Thumbs.db
 *.txt
+
+.claude/
+.cursor/
+.chatgpt/
+.gemini/
