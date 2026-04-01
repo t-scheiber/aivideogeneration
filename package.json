@@ -27,7 +27,7 @@
     "react-dom": "^19.2.3"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/eslintrc": "^3.3.5",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.0.10",
     "@types/react": "^19.2.9",
