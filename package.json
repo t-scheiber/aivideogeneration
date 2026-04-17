@@ -23,8 +23,8 @@
     "better-auth": "^1.6.4",
     "better-sqlite3": "^12.8.0",
     "next": "^16.1.4",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
