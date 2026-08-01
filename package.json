@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.2",
-    "better-auth": "^1.6.23",
+    "better-auth": "^1.6.25",
     "better-sqlite3": "^12.11.1",
     "next": "^16.2.12",
     "react": "^19.2.7",
