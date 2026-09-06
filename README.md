@@ -256,3 +256,11 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 🌟 Star this Repository
 
 If you find this project helpful, please give it a star! It helps others discover the project and shows your support for open-source AI video generation tools.
+
+## Local validation
+
+The maintenance baseline uses Bun 1.4.2 and Node.js 22, matching the existing Nixpacks runtime. Run `bun run build`, `bun run typecheck`, `bun run lint`, and `bun run test` (Node's test runner). The build needs the `better-sqlite3` native binding for the current Node ABI and platform.
+
+The tests exercise authentication boundaries, supported video options, provider request adapters, redacted errors, document metadata, and a loopback production server. Provider requests and sessions are mocked. The production test uses a disposable working directory and a public test-only authentication fixture, with all provider and Google credentials removed. It does not call a video-generation or OAuth service. These tests do not establish that provider APIs, model IDs, pricing or a live deployment remain compatible.
+
+Generation requests accept the options declared by the selected provider. Prompts are limited to 10,000 characters; conditioning images must be PNG, JPEG or WebP and no larger than 10 MiB. Invalid requests return HTTP 400 before a provider call. Unauthenticated API requests return JSON with HTTP 401; `/api/health` remains public.

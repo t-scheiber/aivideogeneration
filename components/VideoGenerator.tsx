@@ -531,7 +531,7 @@ export default function VideoGenerator() {
                       id="conditioning-image-input"
                       onChange={handleImageChange}
                       className="hidden"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp"
                     />
                     <svg className="mb-2 h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -750,7 +750,7 @@ export default function VideoGenerator() {
           </div>
 
           <div className="rounded-2xl border border-blue-600/40 bg-linear-to-br from-blue-900/40 to-purple-900/30 p-6 text-sm text-blue-50">
-            <h3 className="text-base font-semibold text-white">Tips & troubleshooting</h3>
+            <h3 className="text-base font-semibold text-white">Tips &amp; troubleshooting</h3>
             <ul className="mt-4 space-y-3 text-sm">
               <li>• If something looks off after the Better Auth migration, sign out/in once.</li>
               <li>• Ensure the provider API key exists before hitting generate.</li>

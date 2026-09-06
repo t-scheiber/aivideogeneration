@@ -10,6 +10,7 @@ export default async function proxy(req: NextRequest) {
   // Allow access to public pages
   if (nextUrl.pathname.startsWith('/auth/') || 
       nextUrl.pathname === '/' ||
+      nextUrl.pathname === '/api/health' ||
       nextUrl.pathname.startsWith('/api/auth/')) {
     return NextResponse.next();
   }
@@ -17,7 +18,7 @@ export default async function proxy(req: NextRequest) {
   // Require authentication for video generation
   if (nextUrl.pathname.startsWith('/api/generate-video')) {
     if (!isLoggedIn) {
-      return NextResponse.redirect(new URL('/auth/signin', nextUrl));
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
   }
   

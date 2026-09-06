@@ -97,11 +97,11 @@ export class VideoProviderService {
             provider: providerId
           }
       }
-    } catch (error) {
-      console.error(`Error generating video with ${providerId}:`, error)
+    } catch {
+      console.error(`Video provider request failed: ${providerId}`)
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Failed to generate video. Please try again.',
         provider: providerId
       }
     }
@@ -161,7 +161,6 @@ export class VideoProviderService {
     }
 
     const taskId = generateData.taskId
-    console.log(`VEO3 generation started with task ID: ${taskId}`)
 
     // Step 2: Poll for completion
     const maxWaitTime = 300000 // 5 minutes
@@ -183,7 +182,6 @@ export class VideoProviderService {
       }
 
       const statusData = await statusResponse.json()
-      console.log(`VEO3 status: ${statusData.status}`)
 
       if (statusData.status === 'completed') {
         if (!statusData.result?.videoUrl) {

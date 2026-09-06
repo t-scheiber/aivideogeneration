@@ -54,7 +54,7 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - name: Checkout trusted helpers from default branch
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           sparse-checkout: .github/renovate
@@ -72,7 +72,7 @@ jobs:
         run: node "$RUNNER_TEMP/renovate-helpers/scripts/pr-lifecycle.mjs" prepare
 
       - name: Checkout the resolved revision
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ steps.pr.outputs.head }}
           fetch-depth: 0
@@ -109,32 +109,32 @@ jobs:
         run: node "$RUNNER_TEMP/renovate-helpers/scripts/validation-plan.mjs" detect
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '24.20.0'
 
       - name: Set up Bun
         if: steps.detect.outputs.needs_bun == 'true'
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: ${{ steps.detect.outputs.bun_version }}
 
       - name: Set up pnpm
         if: steps.detect.outputs.needs_pnpm == 'true'
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
         with:
           version: ${{ steps.detect.outputs.pnpm_version }}
 
       - name: Set up Java
         if: steps.detect.outputs.needs_java == 'true'
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Python
         if: steps.detect.outputs.needs_python == 'true'
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
           python-version: '3.14.7'
 
@@ -211,7 +211,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout trusted merge controller
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           sparse-checkout: .github/renovate

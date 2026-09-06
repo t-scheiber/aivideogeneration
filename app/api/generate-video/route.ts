@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from '@/lib/auth-server'
 import { VideoProviderService } from '@/lib/video-provider-service'
+import { parseVideoForm } from '../../../lib/video-request'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,25 +11,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    const formData = await request.formData()
-    const prompt = formData.get('prompt') as string
-    const negativePrompt = formData.get('negativePrompt') as string
-    const numberOfVideos = parseInt(formData.get('numberOfVideos') as string)
-    const aspectRatio = formData.get('aspectRatio') as string
-    const durationSeconds = parseInt(formData.get('durationSeconds') as string)
-    const provider = formData.get('provider') as string || 'veo-3'
-    const conditioningImageFile = formData.get('conditioningImage') as File | null
-
-    // VEO3-specific parameters
-    const veo3Model = formData.get('veo3Model') as string || 'veo3-fast'
-    const veo3Resolution = formData.get('veo3Resolution') as string || '720p'
-    const veo3Audio = formData.get('veo3Audio') === 'true'
-
-    if (!prompt) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+    let options: ReturnType<typeof parseVideoForm>
+    try {
+      options = parseVideoForm(await request.formData())
+    } catch {
+      return NextResponse.json({ error: 'Invalid video generation request' }, { status: 400 })
     }
-
-    console.log(`Generating video with provider: ${provider}`)
+    const { prompt, negativePrompt, numberOfVideos, aspectRatio, durationSeconds, provider,
+      conditioningImageFile, veo3Model, veo3Resolution, veo3Audio } = options
 
     // Initialize the provider service
     const providerService = new VideoProviderService()
@@ -78,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json(
-        { error: result.error || 'Failed to generate video' },
+        { error: 'Failed to generate video. Please try again.' },
         { status: 400 }
       )
     }
@@ -88,21 +78,9 @@ export async function POST(request: NextRequest) {
       provider: result.provider,
       cost: result.cost
     })
-  } catch (error) {
-    console.error('Error generating video:', error)
-    
-    // Provide more specific error messages for authentication issues
-    if (error instanceof Error) {
-      if (error.message.includes('authentication') || error.message.includes('credentials')) {
-        return NextResponse.json(
-          { 
-            error: 'Authentication failed. Please check your API credentials.' 
-          },
-          { status: 401 }
-        )
-      }
-    }
-    
+  } catch {
+    console.error('Video generation request failed')
+
     return NextResponse.json(
       { error: 'Failed to generate video. Please try again.' },
       { status: 500 }
