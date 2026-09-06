@@ -153,7 +153,7 @@ export const VIDEO_PROVIDERS: Record<string, VideoProvider> = {
 }
 
 export function getProviderById(id: string): VideoProvider | undefined {
-  return VIDEO_PROVIDERS[id]
+  return Object.prototype.hasOwnProperty.call(VIDEO_PROVIDERS, id) ? VIDEO_PROVIDERS[id] : undefined
 }
 
 export function getAllProviders(): VideoProvider[] {
