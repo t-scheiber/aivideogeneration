@@ -5,7 +5,7 @@
   "private": false,
   "license": "MIT",
   "type": "module",
-  "packageManager": "bun@1.3.1",
+  "packageManager": "bun@1.4.0",
   "keywords": ["ai", "video", "generation", "nextjs", "veo3", "runwayml", "luma", "openai"],
   "author": "AI Video Generation App",
   "repository": {
