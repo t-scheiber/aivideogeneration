@@ -12,10 +12,10 @@ export default function Home() {
         {/* Header with user info */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">
+            <h1 className="motion-hero-lead text-4xl font-bold text-white mb-2">
               Generate Videos with AI
             </h1>
-            <p className="text-gray-300 text-lg">
+            <p className="motion-hero-sub text-gray-300 text-lg">
               Create stunning AI-generated videos with advanced control
             </p>
           </div>
@@ -35,7 +35,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => signOut()}
-                className="bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 text-sm px-4 py-2 rounded-lg border border-red-600/30 hover:border-red-600/50 transition-all duration-200 font-medium"
+                className="bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 text-sm px-4 py-2 rounded-lg border border-red-600/30 hover:border-red-600/50 transition-[color,background-color,border-color,scale] duration-(--motion-fast) ease-out active:scale-(--press-scale) font-medium"
               >
                 Sign Out
               </button>
@@ -44,7 +44,7 @@ export default function Home() {
         </div>
         
         {/* Main content card */}
-        <div className="bg-gray-800/30 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-2xl">
+        <div className="motion-hero-card bg-gray-800/30 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-2xl">
           <div className="p-8">
             <VideoGenerator />
           </div>

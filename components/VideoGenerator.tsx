@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSession, signIn } from '@/lib/auth-client'
 import {
   CostEstimate,
@@ -52,6 +52,7 @@ export default function VideoGenerator() {
   const [videos, setVideos] = useState<string[]>([])
   const [generationMeta, setGenerationMeta] = useState<GenerationMeta | null>(null)
   const [copiedVideoUrl, setCopiedVideoUrl] = useState<string | null>(null)
+  const statusRef = useRef<HTMLDivElement>(null)
 
   const selectedProvider = useMemo<VideoProvider | undefined>(
     () => providers.find((p) => p.id === providerId),
@@ -216,6 +217,18 @@ export default function VideoGenerator() {
     ].filter((f): f is string => Boolean(f))
   }, [selectedModel])
 
+  // When a run finishes, bring the result into view once. The status banner and
+  // the clips render below the form, often off-screen after clicking Generate.
+  const completedAt = generationMeta?.completedAt
+  useEffect(() => {
+    const el = statusRef.current
+    if (!completedAt || !el) return
+    const { top, bottom } = el.getBoundingClientRect()
+    if (top >= 0 && bottom <= window.innerHeight) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+  }, [completedAt])
+
   if (isPending) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -242,7 +255,7 @@ export default function VideoGenerator() {
         <button
           type="button"
           onClick={() => signIn.social({ provider: 'google', callbackURL: '/' })}
-          className="bg-white text-gray-900 font-semibold py-3 px-8 rounded-xl transition-all duration-300 hover:scale-[1.02] focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/70 shadow-lg"
+          className="bg-white text-gray-900 font-semibold py-3 px-8 rounded-xl transition-[scale] duration-(--motion-fast) ease-out pointer-fine:hover:scale-(--hover-scale) active:scale-(--press-scale) focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/70 shadow-lg"
         >
           Continue with Google
         </button>
@@ -331,6 +344,12 @@ export default function VideoGenerator() {
       setIsGenerating(false)
     }
   }
+
+  const messageKind = message.includes('successfully')
+    ? 'success'
+    : message.includes('Failed') || message.includes('Please')
+    ? 'error'
+    : 'info'
 
   const lastGenerationDuration =
     generationMeta?.startedAt && generationMeta?.completedAt
@@ -622,7 +641,7 @@ export default function VideoGenerator() {
               type="button"
               onClick={handleGenerate}
               disabled={isGenerating || imageBlockedByDuration || !providerConfigured}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-purple-600 py-4 text-center text-base font-semibold text-white shadow-lg transition hover:from-blue-700 hover:to-purple-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-purple-600 py-4 text-center text-base font-semibold text-white shadow-lg transition duration-(--motion-press) ease-out active:scale-(--press-scale-soft) hover:from-blue-700 hover:to-purple-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isGenerating ? (
                 <>
@@ -698,7 +717,7 @@ export default function VideoGenerator() {
                     <p className="text-xs text-gray-400">{item.helper}</p>
                   </div>
                   <span
-                    className={`text-xs font-semibold ${
+                    className={`text-xs font-semibold transition-colors duration-(--motion-base) ease-out ${
                       item.ready ? 'text-green-400' : 'text-yellow-400'
                     }`}
                   >
@@ -722,12 +741,14 @@ export default function VideoGenerator() {
 
       {message && (
         <div
+          ref={statusRef}
+          key={messageKind}
           role="status"
           aria-live="polite"
-          className={`rounded-2xl border p-4 ${
-            message.includes('successfully')
+          className={`motion-banner-in scroll-mt-6 rounded-2xl border p-4 ${
+            messageKind === 'success'
               ? 'border-green-600/40 bg-green-900/30 text-green-200'
-              : message.includes('Failed') || message.includes('Please')
+              : messageKind === 'error'
               ? 'border-red-600/40 bg-red-900/30 text-red-200'
               : 'border-blue-600/40 bg-blue-900/30 text-blue-200'
           }`}
@@ -748,7 +769,8 @@ export default function VideoGenerator() {
             {videos.map((video, index) => (
               <div
                 key={`${video}-${index}`}
-                className="space-y-3 rounded-2xl border border-gray-700/60 bg-gray-900/50 p-4"
+                className="motion-result-in space-y-3 rounded-2xl border border-gray-700/60 bg-gray-900/50 p-4"
+                style={{ '--stagger-index': index } as React.CSSProperties}
               >
                 <video controls className="w-full rounded-xl" src={video}>
                   Your browser does not support the video tag.

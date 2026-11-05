@@ -2,6 +2,127 @@
 
 @import "tailwindcss";
 
+/* Hover motion only for real pointers, not touch taps */
+@custom-variant pointer-fine (@media (hover: hover) and (pointer: fine));
+
+/* Motion tokens. Feel: precise, calm, focused. Short durations, strong
+   ease-out, no overshoot. Utilities read these through @theme. */
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+}
+
+:root {
+  --motion-press: 100ms;
+  --motion-fast: 160ms;
+  --motion-base: 200ms;
+  --motion-enter: 320ms;
+  --motion-hero: 400ms;
+  --motion-draw: 700ms;
+  --motion-stagger: 60ms;
+
+  --shift-sm: 6px;
+  --shift-md: 8px;
+  --shift-lg: 12px;
+
+  --press-scale: 0.97;
+  --press-scale-soft: 0.98;
+  --hover-scale: 1.02;
+  --enter-scale: 0.98;
+}
+
+/* Reduced motion: keep short fades, drop travel and scaling */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-base: 150ms;
+    --motion-enter: 150ms;
+    --motion-hero: 150ms;
+    --motion-stagger: 0ms;
+    --shift-sm: 0px;
+    --shift-md: 0px;
+    --shift-lg: 0px;
+    --press-scale: 1;
+    --press-scale-soft: 1;
+    --hover-scale: 1;
+    --enter-scale: 1;
+  }
+}
+
+@keyframes motion-rise {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rise, var(--shift-md)));
+  }
+}
+
+/* No opacity: used on LCP elements so they paint on the first frame */
+@keyframes motion-lift {
+  from {
+    transform: translateY(var(--rise, var(--shift-sm)));
+  }
+}
+
+@keyframes motion-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-result {
+  from {
+    opacity: 0;
+    transform: translateY(var(--shift-lg)) scale(var(--enter-scale));
+  }
+}
+
+@keyframes motion-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+/* Page-load entrance. Runs from server-rendered markup, no JS needed. */
+.motion-hero-lead {
+  animation: motion-lift var(--motion-hero) var(--ease-out) both;
+}
+
+.motion-hero-sub {
+  --rise: var(--shift-sm);
+  animation: motion-rise var(--motion-enter) var(--ease-out) 60ms both;
+}
+
+/* Transform only: on desktop the LCP element is inside this card, and
+   content held at opacity 0 delays LCP. */
+.motion-hero-card {
+  --rise: var(--shift-md);
+  animation: motion-lift var(--motion-enter) var(--ease-out) 120ms both;
+}
+
+/* Status banner, remounted when its kind changes */
+.motion-banner-in {
+  --rise: var(--shift-sm);
+  animation: motion-rise var(--motion-base) var(--ease-out) both;
+}
+
+/* Generated video cards. Set --stagger-index per card. */
+.motion-result-in {
+  animation: motion-result var(--motion-enter) var(--ease-out) both;
+  animation-delay: calc(var(--stagger-index, 0) * var(--motion-stagger));
+}
+
+/* One-time stroke draw. Paths need pathLength="1". */
+.motion-draw path {
+  stroke-dasharray: 1;
+  animation: motion-draw var(--motion-draw) var(--ease-out) 120ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-draw path {
+    stroke-dasharray: none;
+    animation: motion-fade 150ms var(--ease-out) both;
+  }
+}
+
 body {
   font-family: 'Inter', sans-serif;
 }
