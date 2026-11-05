@@ -1,7 +1,7 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError } from "better-auth/api";
-import Database from "better-sqlite3";
 import fs from "fs";
+import { DatabaseSync } from "node:sqlite";
 import path from "path";
 import { isEmailAllowed } from "@/lib/access";
 
@@ -11,7 +11,8 @@ const dbPath = process.env.AUTH_DB_PATH ?? path.join(process.cwd(), ".better-aut
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
 export const authOptions = {
-  database: new Database(dbPath),
+  // Node's built-in SQLite: no native module to compile at install time
+  database: new DatabaseSync(dbPath),
   emailAndPassword: {
     enabled: false, // Only using Google OAuth
   },
