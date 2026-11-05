@@ -9,6 +9,9 @@ function AuthErrorContent() {
   const error = searchParams.get('error')
 
   const getErrorMessage = (error: string | null) => {
+    if (error && /access_denied|forbidden|unable_to_create/i.test(error)) {
+      return 'This Google account is not on the access list for this app.'
+    }
     switch (error) {
       case 'Configuration':
         return 'There is a problem with the server configuration.'
