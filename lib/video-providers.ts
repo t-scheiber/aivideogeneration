@@ -40,6 +40,8 @@ export interface VideoProvider {
   /** Environment variables checked in order for the API key */
   apiKeyEnv: string[]
   docsUrl: string
+  /** Where a visitor creates their own API key */
+  keyUrl: string
   /** Most requests one generation run may send in parallel */
   maxVideos: number
   models: VideoModel[]
@@ -104,6 +106,7 @@ export const VIDEO_PROVIDERS: Record<string, VideoProvider> = {
     description: 'Veo 3.1 through veo3gen.app with native audio, portrait output and 4K on Fast and Quality.',
     apiKeyEnv: ['VEO3_API_KEY'],
     docsUrl: 'https://www.imaginary.app/docs',
+    keyUrl: 'https://www.imaginary.app/docs',
     maxVideos: 4,
     models: [
       veo3genModel(
@@ -135,6 +138,7 @@ export const VIDEO_PROVIDERS: Record<string, VideoProvider> = {
     description: 'Runway Gen-4.5 plus partner models (Veo, Kling, Seedance, Wan) on one Runway key.',
     apiKeyEnv: ['RUNWAYML_API_SECRET', 'RUNWAYML_API_KEY'],
     docsUrl: 'https://docs.dev.runwayml.com/guides/models/',
+    keyUrl: 'https://dev.runwayml.com/',
     maxVideos: 4,
     models: [
       {
@@ -223,6 +227,7 @@ export const VIDEO_PROVIDERS: Record<string, VideoProvider> = {
     description: 'Luma Ray 3.2 through the Luma Agents API. Wide aspect ratio support.',
     apiKeyEnv: ['LUMA_AGENTS_API_KEY', 'LUMA_API_KEY'],
     docsUrl: 'https://docs.agents.lumalabs.ai/guides/videos/generation',
+    keyUrl: 'https://platform.lumalabs.ai/',
     maxVideos: 4,
     models: [
       {

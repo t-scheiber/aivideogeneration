@@ -29,7 +29,8 @@ I was working on multiple web projects and needed AI-generated videos for hero s
 - **Valid options only**: Switching models resets any duration, aspect ratio or resolution the new model does not accept
 - **Server-side checks**: The API route validates every request against the same catalog before calling a provider
 - **Cost estimate**: Runway models show dollars per second; veo3gen and Luma show credits per clip
-- **Key status**: Providers without an API key on the server are marked and cannot be submitted
+- **Key status**: Providers with neither your own key nor a server key are marked and cannot be submitted
+- **Bring your own key**: Guests paste their own provider keys, which stay in their browser (see [Guest mode](#guest-mode-bring-your-own-key))
 
 ### 🎯 **Generation options**
 
@@ -130,7 +131,7 @@ Unlike other tools that show all options regardless of what actually works, this
 │   ├── api/
 │   │   ├── auth/[...all]/route.ts   # Better Auth API handler
 │   │   ├── generate-video/route.ts   # Validates and runs a generation
-│   │   └── providers/route.ts        # Reports which provider keys are set
+│   │   └── providers/route.ts        # Reports which server keys the caller may use
 │   ├── auth/
 │   │   ├── signin/page.tsx          # Sign-in page
 │   │   └── error/page.tsx           # Auth error page
@@ -138,11 +139,14 @@ Unlike other tools that show all options regardless of what actually works, this
 │   ├── layout.tsx                   # Root layout
 │   └── page.tsx                     # Home page
 ├── components/
+│   ├── ApiKeysPanel.tsx             # Saves and removes your own provider keys
 │   └── VideoGenerator.tsx           # Main video generation component
 ├── lib/
 │   ├── auth.ts                      # Better Auth configuration
 │   ├── auth-client.ts               # Client-side auth utilities
 │   ├── auth-server.ts              # Server-side auth utilities
+│   ├── browser-keys.ts              # Your provider keys in localStorage
+│   ├── byok.ts                      # Key header name and format check
 │   ├── video-providers.ts           # Provider and model catalog
 │   └── video-provider-service.ts    # Provider API calls and polling
 ├── proxy.ts                         # Next.js middleware for route protection
@@ -204,9 +208,20 @@ This app uses **Better Auth** with Google OAuth for secure authentication:
 
 - **Sign in**: Click "Sign in with Google" on the home page
 - **Session management**: Automatic session handling with secure cookies
-- **Route protection**: Video generation endpoints require authentication
+- **Route protection**: Signed-in generations need an allowlisted account (`ALLOWED_EMAILS`); everyone else needs their own key
 - **Database**: SQLite database (`.better-auth.db`) stores user sessions
 - **Code quality**: ESLint enforces code quality and formatting
+
+### Guest mode (bring your own key)
+
+Visitors who are not signed in can still use the studio with their own veo3gen, Runway or Luma key. I added this so people can try the app without me paying for their clips.
+
+- Keys are saved in the browser's localStorage under `aivideo.providerKeys.v1`. The **Your API keys** panel saves, replaces and forgets them.
+- When you click Generate, the browser sends only the selected provider's key, in the `x-provider-api-key` header. The server uses it for that one generation and does not store or log it.
+- The providers block calls from browsers, so the request has to go through this server. Only serve the app over HTTPS.
+- Guests never get the server's keys. Signed-in members fall back to a server key when they have not saved their own, and their own key wins when they have.
+- Anyone with access to the browser profile, or script running on the page, can read saved keys. Set a spending limit with each provider.
+- Set `GUEST_MODE=off` to turn guest mode off and require sign-in again.
 
 ## 🤝 Contributing
 
