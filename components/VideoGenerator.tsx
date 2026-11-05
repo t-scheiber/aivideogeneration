@@ -1,7 +1,10 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import ApiKeysPanel from '@/components/ApiKeysPanel'
 import { useSession, signIn } from '@/lib/auth-client'
+import { useStoredKeys } from '@/lib/browser-keys'
+import { PROVIDER_KEY_HEADER } from '@/lib/byok'
 import {
   CostEstimate,
   VideoModel,
@@ -33,6 +36,23 @@ const Chevron = () => (
 const keepOrFirst = <T,>(allowed: T[], current: T): T =>
   allowed.includes(current) ? current : allowed[0]
 
+// Provider responses end up in <video src> and <a href>; only allow web URLs
+const isWebUrl = (value: unknown): value is string => {
+  if (typeof value !== 'string') return false
+  try {
+    return ['https:', 'http:'].includes(new URL(value).protocol)
+  } catch {
+    return false
+  }
+}
+
+interface AccessInfo {
+  /** Providers with a server key this caller may use */
+  configured: Record<string, boolean>
+  member: boolean
+  guestMode: boolean
+}
+
 export default function VideoGenerator() {
   const { data: session, isPending } = useSession()
   const providers = useMemo(() => getAllProviders(), [])
@@ -46,7 +66,8 @@ export default function VideoGenerator() {
   const [resolution, setResolution] = useState('720p')
   const [audio, setAudio] = useState(true)
   const [conditioningImage, setConditioningImage] = useState<File | null>(null)
-  const [configured, setConfigured] = useState<Record<string, boolean> | null>(null)
+  const [access, setAccess] = useState<AccessInfo | null>(null)
+  const { keys: ownKeys, setKey: saveOwnKey, clearAll: forgetOwnKeys } = useStoredKeys()
   const [isGenerating, setIsGenerating] = useState(false)
   const [message, setMessage] = useState('')
   const [videos, setVideos] = useState<string[]>([])
@@ -63,13 +84,26 @@ export default function VideoGenerator() {
     [selectedProvider, modelId]
   )
 
+  const userId = session?.user?.id
   useEffect(() => {
-    if (!session) return
+    if (isPending) return
+    let cancelled = false
     fetch('/api/providers')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setConfigured(data?.configured ?? null))
-      .catch(() => setConfigured(null))
-  }, [session])
+      .then((data) => {
+        if (!cancelled) setAccess(data?.configured ? data : null)
+      })
+      .catch(() => {
+        if (!cancelled) setAccess(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isPending, userId])
+
+  const configured = access?.configured ?? null
+  const hasServerKey = (id: string) => configured?.[id] === true
+  const hasOwnKey = (id: string) => Boolean(ownKeys[id])
 
   const handleProviderChange = (id: string) => {
     const next = providers.find((p) => p.id === id)
@@ -102,7 +136,13 @@ export default function VideoGenerator() {
     return { ...perVideo, amount: perVideo.amount * Math.max(1, numberOfVideos) }
   }, [selectedModel, durationSeconds, resolution, audio, numberOfVideos])
 
-  const providerConfigured = configured ? configured[providerId] !== false : true
+  // Your own key wins over the server key, same as on the server
+  const keySource: 'own' | 'server' | null = ownKeys[providerId]
+    ? 'own'
+    : configured?.[providerId]
+    ? 'server'
+    : null
+  const providerConfigured = keySource !== null
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -167,9 +207,12 @@ export default function VideoGenerator() {
       {
         label: 'Provider key',
         ready: providerConfigured,
-        helper: providerConfigured
-          ? `${selectedProvider?.name ?? 'Provider'} is ready`
-          : `Set ${selectedProvider?.apiKeyEnv[0]} on the server`,
+        helper:
+          keySource === 'own'
+            ? 'Using your key from this browser'
+            : keySource === 'server'
+            ? 'Using the server key'
+            : `Add your ${selectedProvider?.name ?? 'provider'} key`,
       },
       {
         label: 'Model limits',
@@ -193,6 +236,7 @@ export default function VideoGenerator() {
     [
       promptInsights.score,
       providerConfigured,
+      keySource,
       selectedProvider,
       selectedModel,
       imageBlockedByDuration,
@@ -237,7 +281,8 @@ export default function VideoGenerator() {
     )
   }
 
-  if (!session) {
+  // Guests may use the studio with their own keys unless the server turned that off
+  if (!session && access && !access.guestMode) {
     return (
       <div className="text-center space-y-6 bg-gray-900/40 border border-gray-700/60 rounded-2xl p-10 backdrop-blur">
         <div className="space-y-2">
@@ -304,9 +349,12 @@ export default function VideoGenerator() {
         formData.append('conditioningImage', conditioningImage)
       }
 
+      // Only the selected provider's key leaves the browser
+      const ownKey = ownKeys[providerId]
       const response = await fetch('/api/generate-video', {
         method: 'POST',
         body: formData,
+        headers: ownKey ? { [PROVIDER_KEY_HEADER]: ownKey } : undefined,
       })
       const result = await response.json().catch(() => ({}))
 
@@ -314,7 +362,7 @@ export default function VideoGenerator() {
         throw new Error(result.error || `Request failed with status ${response.status}`)
       }
 
-      setVideos(result.videos || [])
+      setVideos(Array.isArray(result.videos) ? result.videos.filter(isWebUrl) : [])
       setGenerationMeta({
         provider: result.provider || providerId,
         model: result.model || selectedModel.id,
@@ -357,7 +405,7 @@ export default function VideoGenerator() {
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-8 lg:grid-cols-[3fr_2fr]">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[3fr_2fr]">
         <section className="space-y-8">
           <div className="space-y-4 rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -416,7 +464,7 @@ export default function VideoGenerator() {
                     {providers.map((p) => (
                       <option key={p.id} value={p.id} className="bg-gray-900 text-white">
                         {p.name}
-                        {configured && configured[p.id] === false ? ' (no API key)' : ''}
+                        {!hasOwnKey(p.id) && !hasServerKey(p.id) ? ' (no API key)' : ''}
                       </option>
                     ))}
                   </select>
@@ -464,8 +512,13 @@ export default function VideoGenerator() {
                 </div>
                 {!providerConfigured && (
                   <p className="rounded-lg border border-yellow-600/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
-                    No API key for {selectedProvider.name} on this server. Set{' '}
-                    <code>{selectedProvider.apiKeyEnv[0]}</code> to enable it.
+                    {access?.member
+                      ? <>No {selectedProvider.name} key yet. Add yours under{' '}
+                          <a href="#api-keys" className="underline underline-offset-2">Your API keys</a>, or set{' '}
+                          <code>{selectedProvider.apiKeyEnv[0]}</code> on the server.</>
+                      : <>Add your {selectedProvider.name} key under{' '}
+                          <a href="#api-keys" className="underline underline-offset-2">Your API keys</a> to generate with it.
+                          Generations bill your provider account.</>}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
@@ -660,17 +713,42 @@ export default function VideoGenerator() {
 
         <aside className="space-y-6">
           <div className="rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-400">Signed in as</p>
-                <p className="text-lg font-semibold text-white">
-                  {session.user?.name ?? session.user?.email}
+            {session ? (
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wide text-gray-400">Signed in as</p>
+                  <p className="truncate text-lg font-semibold text-white">
+                    {session.user?.name ?? session.user?.email}
+                  </p>
+                </div>
+                <span className="rounded-full border border-green-600/40 bg-green-900/30 px-3 py-1 text-xs font-medium text-green-300">
+                  Active
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-400">Guest mode</p>
+                    <p className="text-lg font-semibold text-white">Bring your own key</p>
+                  </div>
+                  <span className="rounded-full border border-blue-600/40 bg-blue-900/30 px-3 py-1 text-xs font-medium text-blue-200">
+                    Guest
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400">
+                  Generations run on your provider account. Approved accounts can{' '}
+                  <button
+                    type="button"
+                    onClick={() => signIn.social({ provider: 'google', callbackURL: '/' })}
+                    className="font-medium text-blue-300 underline-offset-2 hover:underline"
+                  >
+                    sign in with Google
+                  </button>{' '}
+                  to use the server keys.
                 </p>
               </div>
-              <span className="rounded-full border border-green-600/40 bg-green-900/30 px-3 py-1 text-xs font-medium text-green-300">
-                Active
-              </span>
-            </div>
+            )}
             <dl className="mt-6 grid grid-cols-2 gap-4 text-sm text-gray-300">
               <div>
                 <dt className="text-gray-400">Provider</dt>
@@ -705,6 +783,15 @@ export default function VideoGenerator() {
               </div>
             )}
           </div>
+
+          <ApiKeysPanel
+            providers={providers}
+            keys={ownKeys}
+            selectedProviderId={providerId}
+            serverKeys={configured}
+            onSave={saveOwnKey}
+            onClearAll={forgetOwnKeys}
+          />
 
           <div className="rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
             <h3 className="text-sm font-semibold text-white">Run readiness</h3>
@@ -761,7 +848,7 @@ export default function VideoGenerator() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-white">Generated videos</h3>
             <p className="text-xs text-gray-400">
-              We keep the links available while your session stays active.
+              Links stay here until you reload the page.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

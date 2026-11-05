@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isEmailAllowed } from '@/lib/access'
+import { isEmailAllowed, isGuestModeEnabled } from '@/lib/access'
 import { getServerSession } from '@/lib/auth-server'
+import { PROVIDER_KEY_HEADER, normalizeProviderKey } from '@/lib/byok'
 import {
   VideoGenerationRequest,
   generateVideos,
@@ -16,11 +17,24 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession()
-  if (!session?.user) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  const member = Boolean(session?.user) && isEmailAllowed(session?.user.email)
+  // The caller's own key for the selected provider. Used for this request
+  // only: it is never stored or logged.
+  const ownKey = normalizeProviderKey(request.headers.get(PROVIDER_KEY_HEADER))
+
+  if (!member && !ownKey) {
+    if (!isGuestModeEnabled()) {
+      return session?.user
+        ? NextResponse.json({ error: 'This account is not allowed to generate videos' }, { status: 403 })
+        : NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    return NextResponse.json(
+      { error: 'Add your own API key for this provider to generate as a guest.' },
+      { status: 401 }
+    )
   }
-  if (!isEmailAllowed(session.user.email)) {
-    return NextResponse.json({ error: 'This account is not allowed to generate videos' }, { status: 403 })
+  if (!member && !isGuestModeEnabled()) {
+    return NextResponse.json({ error: 'Guest mode is turned off on this server. Sign in instead.' }, { status: 403 })
   }
 
   try {
@@ -56,15 +70,19 @@ export async function POST(request: NextRequest) {
     }
 
     const provider = getProviderById(generation.providerId)!
-    const apiKey = getApiKey(provider)
+    // Your own key wins; members fall back to the server key
+    const apiKey = ownKey ?? (member ? getApiKey(provider) : undefined)
     if (!apiKey) {
       return NextResponse.json(
-        { error: `${provider.name} is not configured. Set ${provider.apiKeyEnv[0]} on the server.` },
+        { error: `${provider.name} has no API key on the server. Add your own key or set ${provider.apiKeyEnv[0]}.` },
         { status: 503 }
       )
     }
 
-    console.log(`Generating ${generation.numberOfVideos} video(s) with ${provider.id}/${generation.modelId}`)
+    const keySource = ownKey ? 'own key' : 'server key'
+    console.log(
+      `Generating ${generation.numberOfVideos} video(s) with ${provider.id}/${generation.modelId} (${member ? 'member' : 'guest'}, ${keySource})`
+    )
     const result = await generateVideos(generation, apiKey)
 
     if (!result.success) {

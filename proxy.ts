@@ -7,11 +7,15 @@ import { getSessionCookie } from "better-auth/cookies";
 export default function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // The studio API serves guests who bring their own keys, so these routes
+  // decide access themselves instead of requiring a session cookie.
   const isPublic =
     pathname === "/" ||
     pathname.startsWith("/auth/") ||
     pathname.startsWith("/api/auth/") ||
-    pathname === "/api/health";
+    pathname === "/api/health" ||
+    pathname === "/api/providers" ||
+    pathname === "/api/generate-video";
   if (isPublic) {
     return NextResponse.next();
   }
