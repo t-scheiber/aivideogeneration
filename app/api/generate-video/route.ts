@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     if (!apiKey) {
       return NextResponse.json(
         { error: `${provider.name} has no API key on the server. Add your own key or set ${provider.apiKeyEnv[0]}.` },
-        { status: 503 }
+        { status: 400 }
       )
     }
 
@@ -85,8 +85,11 @@ export async function POST(request: NextRequest) {
     )
     const result = await generateVideos(generation, apiKey)
 
+    // 422, not 502: Cloudflare replaces 502 bodies from the origin with its
+    // own "error code: 502" page, which hides the provider's reason (a bad
+    // key, no credits) from the user.
     if (!result.success) {
-      return NextResponse.json({ error: result.error ?? 'Generation failed' }, { status: 502 })
+      return NextResponse.json({ error: result.error ?? 'Generation failed' }, { status: 422 })
     }
 
     return NextResponse.json({
