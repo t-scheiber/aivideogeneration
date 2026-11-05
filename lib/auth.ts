@@ -1,12 +1,17 @@
-import { betterAuth } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { APIError } from "better-auth/api";
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
+import { isEmailAllowed } from "@/lib/access";
 
-// Use SQLite for Better Auth
-const db = new Database(path.join(process.cwd(), ".better-auth.db"));
+// AUTH_DB_PATH should point at a persistent volume in production,
+// otherwise sessions and users are lost on every redeploy.
+const dbPath = process.env.AUTH_DB_PATH ?? path.join(process.cwd(), ".better-auth.db");
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-export const auth = betterAuth({
-  database: db,
+export const authOptions = {
+  database: new Database(dbPath),
   emailAndPassword: {
     enabled: false, // Only using Google OAuth
   },
@@ -16,11 +21,41 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
     },
   },
-  secret: process.env.AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET ?? "",
+  secret: process.env.BETTER_AUTH_SECRET ?? process.env.AUTH_SECRET ?? "",
   baseURL: process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
   basePath: "/api/auth",
   session: {
     expiresIn: 30 * 24 * 60 * 60, // 30 days
     updateAge: 24 * 60 * 60, // 24 hours
   },
-});
+  onAPIError: {
+    errorURL: "/auth/error",
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (!isEmailAllowed(user.email)) {
+            throw new APIError("FORBIDDEN", { message: "access_denied" });
+          }
+          return { data: user };
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session, context) => {
+          const user = context
+            ? await context.context.internalAdapter.findUserById(session.userId)
+            : null;
+          if (!isEmailAllowed(user?.email)) {
+            throw new APIError("FORBIDDEN", { message: "access_denied" });
+          }
+          return { data: session };
+        },
+      },
+    },
+  },
+} satisfies BetterAuthOptions;
+
+export const auth = betterAuth(authOptions);

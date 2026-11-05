@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isEmailAllowed } from '@/lib/access'
 import { getServerSession } from '@/lib/auth-server'
 import {
   VideoGenerationRequest,
@@ -17,6 +18,9 @@ export async function POST(request: NextRequest) {
   const session = await getServerSession()
   if (!session?.user) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+  if (!isEmailAllowed(session.user.email)) {
+    return NextResponse.json({ error: 'This account is not allowed to generate videos' }, { status: 403 })
   }
 
   try {
