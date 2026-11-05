@@ -1,29 +1,26 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getCookieCache } from "better-auth/cookies";
+import { getSessionCookie } from "better-auth/cookies";
 
-export default async function proxy(req: NextRequest) {
-  const session = await getCookieCache(req);
-  const isLoggedIn = !!session?.user;
-  const { nextUrl } = req;
+// Optimistic check: only looks for the session cookie. API routes still
+// validate the session itself (see lib/auth-server.ts).
+export default function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-  // Allow access to public pages
-  if (nextUrl.pathname.startsWith('/auth/') || 
-      nextUrl.pathname === '/' ||
-      nextUrl.pathname.startsWith('/api/auth/')) {
+  const isPublic =
+    pathname === "/" ||
+    pathname.startsWith("/auth/") ||
+    pathname.startsWith("/api/auth/") ||
+    pathname === "/api/health";
+  if (isPublic) {
     return NextResponse.next();
   }
-  
-  // Require authentication for video generation
-  if (nextUrl.pathname.startsWith('/api/generate-video')) {
-    if (!isLoggedIn) {
-      return NextResponse.redirect(new URL('/auth/signin', nextUrl));
+
+  if (!getSessionCookie(req)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
-  }
-  
-  // Require authentication for other protected routes
-  if (!isLoggedIn) {
-    return NextResponse.redirect(new URL('/auth/signin', nextUrl));
+    return NextResponse.redirect(new URL("/auth/signin", req.nextUrl));
   }
 
   return NextResponse.next();
@@ -31,7 +28,6 @@ export default async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-touch-icon.png).*)',
   ],
 }
-

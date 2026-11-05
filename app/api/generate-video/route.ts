@@ -1,112 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from '@/lib/auth-server'
-import { VideoProviderService } from '@/lib/video-provider-service'
+import {
+  VideoGenerationRequest,
+  generateVideos,
+  getApiKey,
+  validateRequest,
+} from '@/lib/video-provider-service'
+import { getProviderById } from '@/lib/video-providers'
+
+// Generations poll the provider until the clip is ready, which can take minutes.
+export const maxDuration = 800
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 export async function POST(request: NextRequest) {
+  const session = await getServerSession()
+  if (!session?.user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
+
   try {
-    // Check if user is authenticated
-    const session = await getServerSession()
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    const form = await request.formData()
+    const text = (key: string) => (form.get(key) as string | null) ?? ''
+    const imageFile = form.get('conditioningImage') as File | null
+
+    if (imageFile && imageFile.size > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: 'Reference image must be 5 MB or smaller' }, { status: 400 })
     }
 
-    const formData = await request.formData()
-    const prompt = formData.get('prompt') as string
-    const negativePrompt = formData.get('negativePrompt') as string
-    const numberOfVideos = parseInt(formData.get('numberOfVideos') as string)
-    const aspectRatio = formData.get('aspectRatio') as string
-    const durationSeconds = parseInt(formData.get('durationSeconds') as string)
-    const provider = formData.get('provider') as string || 'veo-3'
-    const conditioningImageFile = formData.get('conditioningImage') as File | null
-
-    // VEO3-specific parameters
-    const veo3Model = formData.get('veo3Model') as string || 'veo3-fast'
-    const veo3Resolution = formData.get('veo3Resolution') as string || '720p'
-    const veo3Audio = formData.get('veo3Audio') === 'true'
-
-    if (!prompt) {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+    const generation: VideoGenerationRequest = {
+      providerId: text('provider'),
+      modelId: text('model'),
+      prompt: text('prompt'),
+      negativePrompt: text('negativePrompt') || undefined,
+      durationSeconds: Number(text('durationSeconds')),
+      aspectRatio: text('aspectRatio'),
+      resolution: text('resolution'),
+      audio: text('audio') === 'true',
+      numberOfVideos: Number(text('numberOfVideos') || '1'),
+      conditioningImage: imageFile
+        ? {
+            mimeType: imageFile.type,
+            imageBytes: Buffer.from(await imageFile.arrayBuffer()).toString('base64'),
+          }
+        : undefined,
     }
 
-    console.log(`Generating video with provider: ${provider}`)
-
-    // Initialize the provider service
-    const providerService = new VideoProviderService()
-
-    // Prepare the request data
-    const requestData = {
-      prompt,
-      negativePrompt: negativePrompt || undefined,
-      durationSeconds,
-      aspectRatio,
-      numberOfVideos,
-      conditioningImage: conditioningImageFile ? {
-        mimeType: conditioningImageFile.type,
-        imageBytes: Buffer.from(await conditioningImageFile.arrayBuffer()).toString('base64')
-      } : undefined,
-      // VEO3-specific parameters
-      veo3Model,
-      veo3Resolution,
-      veo3Audio
+    const invalid = validateRequest(generation)
+    if (invalid) {
+      return NextResponse.json({ error: invalid }, { status: 400 })
     }
 
-    // Get the appropriate API key based on provider
-    let apiKey: string | undefined
-    switch (provider) {
-      case 'veo-3':
-        // VEO3 uses its own API key
-        apiKey = process.env.VEO3_API_KEY
-        if (!apiKey) {
-          return NextResponse.json({ 
-            error: 'VEO3 API key required. Please set VEO3_API_KEY in your environment variables.' 
-          }, { status: 500 })
-        }
-        break
-      case 'runwayml':
-        apiKey = process.env.RUNWAYML_API_KEY
-        break
-      case 'luma':
-        apiKey = process.env.LUMA_API_KEY
-        break
-      case 'openai-sora':
-        apiKey = process.env.OPENAI_API_KEY
-        break
-    }
-
-    // Generate video using the selected provider
-    const result = await providerService.generateVideo(provider, requestData, apiKey)
-
-    if (!result.success) {
+    const provider = getProviderById(generation.providerId)!
+    const apiKey = getApiKey(provider)
+    if (!apiKey) {
       return NextResponse.json(
-        { error: result.error || 'Failed to generate video' },
-        { status: 400 }
+        { error: `${provider.name} is not configured. Set ${provider.apiKeyEnv[0]} on the server.` },
+        { status: 503 }
       )
     }
 
-    return NextResponse.json({ 
+    console.log(`Generating ${generation.numberOfVideos} video(s) with ${provider.id}/${generation.modelId}`)
+    const result = await generateVideos(generation, apiKey)
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error ?? 'Generation failed' }, { status: 502 })
+    }
+
+    return NextResponse.json({
       videos: result.videos,
       provider: result.provider,
-      cost: result.cost
+      model: result.model,
+      cost: result.cost,
+      warning: result.error,
     })
   } catch (error) {
     console.error('Error generating video:', error)
-    
-    // Provide more specific error messages for authentication issues
-    if (error instanceof Error) {
-      if (error.message.includes('authentication') || error.message.includes('credentials')) {
-        return NextResponse.json(
-          { 
-            error: 'Authentication failed. Please check your API credentials.' 
-          },
-          { status: 401 }
-        )
-      }
-    }
-    
-    return NextResponse.json(
-      { error: 'Failed to generate video. Please try again.' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate video. Please try again.' }, { status: 500 })
   }
 }
-
