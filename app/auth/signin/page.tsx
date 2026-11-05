@@ -38,10 +38,10 @@ export default function SignIn() {
               </svg>
             </div>
             <h2 className="text-3xl font-bold text-white mb-2">
-              Welcome to Veo
+              Sign in to the studio
             </h2>
             <p className="text-gray-300">
-              Sign in to create amazing AI-generated videos
+              Generate video clips with Veo, Runway and Luma
             </p>
           </div>
           

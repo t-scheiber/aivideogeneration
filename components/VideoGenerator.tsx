@@ -243,14 +243,13 @@ export default function VideoGenerator() {
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-white">Sign in to generate videos</h2>
           <p className="text-gray-300 max-w-xl mx-auto">
-            We just migrated to Better Auth for more reliable sessions. Please continue with Google
-            to unlock the studio.
+            Continue with Google to open the studio. Access is limited to approved accounts.
           </p>
         </div>
         <ul className="text-sm text-gray-300 space-y-2 text-left max-w-xl mx-auto">
-          <li>• Secure Google OAuth powered by Better Auth</li>
-          <li>• Access to all providers with adaptive UI</li>
-          <li>• Project-safe storage in your local browser</li>
+          <li>• Veo 3.1, Runway and Luma models in one place</li>
+          <li>• Controls that match each model's limits</li>
+          <li>• A cost estimate before every run</li>
         </ul>
         <button
           type="button"
@@ -358,7 +357,7 @@ export default function VideoGenerator() {
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-8 lg:grid-cols-[3fr,2fr]">
+      <div className="grid gap-8 lg:grid-cols-[3fr_2fr]">
         <section className="space-y-8">
           <div className="space-y-4 rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
