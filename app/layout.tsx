@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
+// Self-hosted at build time with a size-matched fallback, so text neither
+// waits on fonts.googleapis.com nor shifts when the font arrives.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+
+// Icons come from the file conventions in app/ (favicon.ico, icon.svg, apple-touch-icon.png).
 export const metadata: Metadata = {
   title: "Generate Videos with AI",
   description: "Generate videos using multiple AI models with advanced features",
@@ -9,14 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <header>
-        <title>Generate Videos with AI</title>
-        <meta name="description" content="Generate videos using multiple AI models with advanced features" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <link rel="icon" href="/icon?<generated>" type="image/<generated>" sizes="<generated>" />
-        <link rel="apple-touch-icon" href="/apple-icon?<generated>" type="image/<generated>" sizes="<generated>" />
-      </header>
+    <html lang="en" className={inter.variable}>
       <body className="bg-[#1E1F20] font-sans text-gray-300 antialiased">
         <Providers>{children}</Providers>
       </body>
