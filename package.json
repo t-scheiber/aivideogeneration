@@ -1,12 +1,12 @@
 {
   "name": "ai-video-generation-app",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "description": "A comprehensive Next.js application for generating high-quality AI videos with multiple providers",
   "private": false,
   "license": "MIT",
   "type": "module",
   "packageManager": "bun@1.4.0",
-  "keywords": ["ai", "video", "generation", "nextjs", "veo3", "runwayml", "luma", "openai"],
+  "keywords": ["ai", "video", "generation", "nextjs", "veo", "runway", "kling", "seedance", "wan", "luma"],
   "author": "AI Video Generation App",
   "repository": {
     "type": "git",

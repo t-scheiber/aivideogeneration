@@ -4,48 +4,47 @@ A comprehensive Next.js application for generating high-quality AI videos for we
 
 ## 🎯 Why I Built This
 
-I was working on multiple web projects and needed high-quality AI-generated videos for hero sections, but existing solutions were either too expensive, limited, or unreliable. So I built my own tool that supports **4 different AI video generation providers** with a **smart, adaptive interface** that gives me:
+I was working on multiple web projects and needed AI-generated videos for hero sections, but existing tools were too expensive, too limited or unreliable. So I built my own. It talks to three provider APIs and covers ten current video models, and the interface only shows the options the chosen model supports.
 
-- **Flexibility**: Choose the best provider for each project's needs and budget
-- **Cost Control**: Compare real-time pricing and use the most cost-effective option
-- **No Confusion**: UI automatically shows only the features each provider actually supports
-- **Future-Proof**: Easy to add new providers as they become available
-- **Professional Results**: Access to the latest models from Google, OpenAI, RunwayML, and more
+- **Flexibility**: Pick the provider and model that fit the project and budget
+- **Cost control**: See an estimate in dollars or credits before you generate
+- **No guesswork**: Durations, aspect ratios, resolutions and audio follow each model's real limits
+- **Easy to extend**: Models live in one catalog file (`lib/video-providers.ts`)
 
 ## ✨ Features
 
-### 🎬 **4 AI Video Providers**
+### 🎬 **Providers and models**
 
-Choose from the best video generation services with **smart capability-based UI**:
+| Provider | Models | Key variable |
+|----------|--------|--------------|
+| **Google Veo 3.1 via [veo3gen.app](https://www.imaginary.app/docs)** (default) | Veo 3.1 Fast, Veo 3.1 Quality, Veo 3.1 Lite | `VEO3_API_KEY` |
+| **[Runway API](https://docs.dev.runwayml.com/guides/models/)** | Gen-4.5, Veo 3.1, Veo 3.1 Fast, Kling 4, Seedance 2.5, Wan 3 | `RUNWAYML_API_SECRET` |
+| **[Luma Agents API](https://docs.agents.lumalabs.ai/guides/videos/generation)** | Ray 3.2 | `LUMA_AGENTS_API_KEY` |
 
-- **VEO3 API** - Advanced features with audio generation ($0.08/sec) - **Primary Provider**
-- **RunwayML Gen-4** - Professional quality with camera controls ($0.05/sec)
-- **Luma Dream Machine** - Character consistency & realistic physics ($0.02/sec)
-- **OpenAI Sora** - Exceptional quality for complex scenes ($0.10/sec)
+> **OpenAI Sora was removed.** OpenAI shut down the Sora 2 models and the Videos API on September 24, 2026. Veo 3.1 (through veo3gen or Runway) covers the same text-to-video and image-to-video jobs.
 
-> **Note**: Pika Labs 2.2 is temporarily disabled while awaiting API access approval.
+### 🧠 **Adaptive interface**
 
-### 🧠 **Smart Adaptive Interface**
+- **Model picker**: Choose a provider, then one of its models
+- **Valid options only**: Switching models resets any duration, aspect ratio or resolution the new model does not accept
+- **Server-side checks**: The API route validates every request against the same catalog before calling a provider
+- **Cost estimate**: Runway models show dollars per second; veo3gen and Luma show credits per clip
+- **Key status**: Providers without an API key on the server are marked and cannot be submitted
 
-- **Dynamic Controls**: UI automatically shows/hides options based on provider capabilities
-- **Auto-Validation**: Values adjust automatically when switching providers
-- **Capability-Aware**: Only shows supported features (aspect ratios, durations, etc.)
-- **Real-time Cost Estimation**: Accurate pricing based on actual provider limits
+### 🎯 **Generation options**
 
-### 🎯 **Advanced Video Generation**
-
-- **Multiple Aspect Ratios**: 16:9, 9:16, 1:1, 4:3, 21:9 support (provider-dependent)
-- **Image-to-Video**: Upload reference images for better results
-- **Negative Prompts**: Specify what you don't want in your videos
-- **Batch Generation**: Create multiple video variations (where supported)
-- **Resolution Control**: 720p, 1080p, 4K options (provider-dependent)
-- **Frame Rate Control**: 24, 30, 60 FPS options (provider-dependent)
-- **Smart Duration Selection**: Dropdown for fixed durations, input for flexible ones
+- **Aspect ratios**: 16:9 and 9:16 everywhere; 1:1 on Kling 4, Seedance 2.5 and Wan 3; 4:3, 3:4 and 21:9 on Ray 3.2
+- **Durations**: 8s on veo3gen, 4/6/8s for Veo on Runway, 2–10s on Gen-4.5, up to 30s on Kling 4, Seedance 2.5 and Wan 3, 5s or 10s on Ray 3.2
+- **Resolution**: 360p to 1080p, plus 4K on Veo 3.1 Fast and Quality through veo3gen
+- **Native audio**: Veo 3.1, Seedance 2.5 and Wan 3
+- **Image-to-video**: Upload a start frame (JPEG, PNG or WebP, up to 5 MB)
+- **Negative prompts**: Veo 3.1 models
+- **Variations**: Up to 4 per run, each one a separate billed generation
 
 ## 🚀 Quick Start
 
 1. **Prerequisites:**
-   - **Bun 1.3.1+** installed ([get Bun](https://bun.sh))
+   - **Bun 1.4+** installed ([get Bun](https://bun.sh))
    - Google OAuth credentials (for authentication)
 
 2. **Install dependencies:**
@@ -70,14 +69,10 @@ Choose from the best video generation services with **smart capability-based UI*
    BETTER_AUTH_SECRET=your-random-secret-key
    NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-   # Video Generation API Keys (choose providers you want to use)
-   VEO3_API_KEY=veo_your-veo3-api-key-here      # For VEO3 (Primary Provider)
-   RUNWAYML_API_KEY=your-runwayml-api-key-here  # For RunwayML Gen-4
-   LUMA_API_KEY=your-luma-api-key-here           # For Luma Dream Machine
-   OPENAI_API_KEY=your-openai-api-key-here      # For OpenAI Sora
-
-   # Pika Labs 2.2 is temporarily disabled (awaiting API access)
-   # PIKA_API_KEY=your-pika-api-key-here
+   # Video generation API keys (set the ones you use)
+   VEO3_API_KEY=veo_your-key            # veo3gen.app: Veo 3.1 Fast, Quality, Lite
+   RUNWAYML_API_SECRET=your-key         # Runway API: Gen-4.5, Veo 3.1, Kling 4, Seedance 2.5, Wan 3
+   LUMA_AGENTS_API_KEY=your-key         # Luma Agents API: Ray 3.2
    ```
 
 4. **Run the development server:**
@@ -89,31 +84,24 @@ Choose from the best video generation services with **smart capability-based UI*
 5. **Open your browser:**
    Navigate to [http://localhost:3000](http://localhost:3000) and sign in with Google
 
-## 💰 Cost Comparison & Capabilities
+## 💰 Models, limits and pricing
 
-| Provider | Cost/Second | Best For | Free Tier | Key Features |
-|----------|-------------|----------|-----------|--------------|
-| **Luma Dream Machine** | $0.02 | Fast generation | 30s/month | Character consistency, realistic physics |
-| **RunwayML Gen-4** | $0.05 | Professional quality | 125s/month | Camera controls, keyframe controls, style consistency |
-| **VEO3 API** | $0.08 | Advanced features | 20s/month | Audio generation, enhanced prompts, 720p/1080p |
-| **OpenAI Sora** | $0.10 | Complex scenes | 10s/month | Exceptional quality, realistic physics, long-form content |
+Prices as listed by each provider in November 2026. Runway lists "from" prices; higher resolutions and audio can cost more.
 
-> **Note**: Pika Labs 2.2 ($0.03/sec) is temporarily disabled while awaiting API access approval.
+| Model | Provider | Durations | Max resolution | Audio | Price |
+|-------|----------|-----------|----------------|-------|-------|
+| Veo 3.1 Lite | veo3gen | 8s | 1080p | ✅ | 2–5 credits/clip |
+| Veo 3.1 Fast | veo3gen | 8s | 4K | ✅ | 6–22 credits/clip |
+| Veo 3.1 Quality | veo3gen | 8s | 4K | ✅ | 13–38 credits/clip |
+| Gen-4.5 | Runway | 2–10s | 720p | ❌ | $0.12/s |
+| Veo 3.1 | Runway | 4, 6, 8s | 1080p | ✅ | from $0.20/s |
+| Veo 3.1 Fast | Runway | 4, 6, 8s | 1080p | ✅ | from $0.10/s |
+| Kling 4 | Runway | 3–30s | 1080p | ❌ | from $0.157/s |
+| Seedance 2.5 | Runway | 5–30s | 1080p | ✅ | from $0.20/s |
+| Wan 3 | Runway | 2–30s | 1080p | ✅ | from $0.05/s |
+| Ray 3.2 | Luma | 5s, 10s | 1080p | ❌ | 20–1200 credits/clip |
 
-### 🎯 **Provider Capabilities Matrix**
-
-| Feature | VEO3 | RunwayML | Luma | Sora |
-|---------|------|----------|------|------|
-| **Multiple Videos** | ❌ | ✅ (4) | ❌ | ✅ (4) |
-| **Image-to-Video** | ✅ | ✅ | ✅ | ✅ |
-| **Negative Prompts** | ✅ | ✅ | ✅ | ✅ |
-| **Resolution Options** | ✅ | ✅ | ✅ | ✅ |
-| **FPS Control** | ❌ | ✅ | ❌ | ✅ |
-| **Audio Generation** | ✅ | ❌ | ❌ | ❌ |
-| **Max Duration** | 8s | 18s | 5s | 60s |
-| **Aspect Ratios** | 16:9 only | 16:9, 9:16, 1:1 | 16:9, 9:16, 1:1 | All ratios |
-
-> **Note**: Pika Labs 2.2 is temporarily disabled while awaiting API access approval.
+Ray 3.2 cannot start a 10s clip from an image. Runway and Luma video links expire after about an hour, so download the clips you want to keep.
 
 ## 🎬 Perfect for Web Projects
 
@@ -141,7 +129,8 @@ Unlike other tools that show all options regardless of what actually works, this
 ├── app/
 │   ├── api/
 │   │   ├── auth/[...all]/route.ts   # Better Auth API handler
-│   │   └── generate-video/route.ts   # Multi-provider API endpoint
+│   │   ├── generate-video/route.ts   # Validates and runs a generation
+│   │   └── providers/route.ts        # Reports which provider keys are set
 │   ├── auth/
 │   │   ├── signin/page.tsx          # Sign-in page
 │   │   └── error/page.tsx           # Auth error page
@@ -154,8 +143,8 @@ Unlike other tools that show all options regardless of what actually works, this
 │   ├── auth.ts                      # Better Auth configuration
 │   ├── auth-client.ts               # Client-side auth utilities
 │   ├── auth-server.ts              # Server-side auth utilities
-│   ├── video-providers.ts           # Provider configurations
-│   └── video-provider-service.ts    # Provider service logic
+│   ├── video-providers.ts           # Provider and model catalog
+│   └── video-provider-service.ts    # Provider API calls and polling
 ├── proxy.ts                         # Next.js middleware for route protection
 ├── next.config.mjs                  # Next.js configuration
 ├── tailwind.config.cjs              # Tailwind CSS configuration
@@ -176,8 +165,8 @@ Unlike other tools that show all options regardless of what actually works, this
 2. **Add negative prompts** (if supported by your provider)
 3. **Select aspect ratio and duration** - Only supported options are shown
 4. **Upload reference images** (if supported by your provider)
-5. **Choose resolution and FPS** (if supported by your provider)
-6. **Generate multiple variations** (if supported by your provider)
+5. **Choose resolution and audio** (if the model supports them)
+6. **Pick how many variations** to generate
 7. **Download and use** in your web projects
 
 ### **🎨 Smart UI Features**
@@ -189,14 +178,14 @@ Unlike other tools that show all options regardless of what actually works, this
 
 ## 🛠️ Technologies Used
 
-- **Next.js 16.0.1** - React framework with App Router and Turbopack
+- **Next.js 16** - React framework with App Router and Turbopack
 - **React 19** - Modern UI components with hooks
 - **TypeScript** - Full type safety across all providers
 - **Tailwind CSS 4** - Responsive, modern styling
-- **Bun 1.3.1** - Fast package manager and runtime
+- **Bun 1.4** - Package manager and runtime
 - **Better Auth** - Modern authentication with Google OAuth
 - **SQLite** - Lightweight database for Better Auth sessions
-- **Multi-Provider Architecture** - Unified interface for 4 different AI video APIs
+- **Model catalog** - One file describes every provider and model; UI and API both read it
 - **Capability-Based UI** - Dynamic controls that adapt to provider limitations
 - **Real-time Cost Estimation** - Accurate pricing based on actual API costs
 - **Smart Validation** - Automatic value adjustment when switching providers
