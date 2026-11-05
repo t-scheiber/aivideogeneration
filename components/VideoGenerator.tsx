@@ -1,47 +1,107 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useSession, signIn } from '@/lib/auth-client'
-import { getAllProviders, VideoProvider, calculateCost } from '@/lib/video-providers'
+import {
+  CostEstimate,
+  VideoModel,
+  VideoProvider,
+  formatCost,
+  getAllProviders,
+} from '@/lib/video-providers'
 
 interface GenerationMeta {
   provider: string
-  cost?: number
+  model: string
+  cost?: CostEstimate
   startedAt?: number
   completedAt?: number
   error?: string
 }
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-})
+const selectClass =
+  'w-full appearance-none rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60'
 
-const formatCurrency = (value: number) => currencyFormatter.format(value)
+const Chevron = () => (
+  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  </div>
+)
+
+const keepOrFirst = <T,>(allowed: T[], current: T): T =>
+  allowed.includes(current) ? current : allowed[0]
 
 export default function VideoGenerator() {
   const { data: session, isPending } = useSession()
   const providers = useMemo(() => getAllProviders(), [])
-  const [provider, setProvider] = useState(() => providers[0]?.id ?? 'veo-3')
+  const [providerId, setProviderId] = useState(() => providers[0]?.id ?? 'veo-3')
+  const [modelId, setModelId] = useState(() => providers[0]?.models[0]?.id ?? '')
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
   const [numberOfVideos, setNumberOfVideos] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('16:9')
-  const [durationSeconds, setDurationSeconds] = useState(5)
+  const [durationSeconds, setDurationSeconds] = useState(8)
+  const [resolution, setResolution] = useState('720p')
+  const [audio, setAudio] = useState(true)
   const [conditioningImage, setConditioningImage] = useState<File | null>(null)
-  const [veo3Model, setVeo3Model] = useState('veo3-fast')
-  const [veo3Resolution, setVeo3Resolution] = useState('720p')
-  const [veo3Audio, setVeo3Audio] = useState(true)
+  const [configured, setConfigured] = useState<Record<string, boolean> | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [message, setMessage] = useState('')
   const [videos, setVideos] = useState<string[]>([])
   const [generationMeta, setGenerationMeta] = useState<GenerationMeta | null>(null)
   const [copiedVideoUrl, setCopiedVideoUrl] = useState<string | null>(null)
 
-  const selectedProvider = useMemo<VideoProvider | undefined>(() => {
-    return providers.find((p) => p.id === provider)
-  }, [providers, provider])
+  const selectedProvider = useMemo<VideoProvider | undefined>(
+    () => providers.find((p) => p.id === providerId),
+    [providers, providerId]
+  )
+  const selectedModel = useMemo<VideoModel | undefined>(
+    () => selectedProvider?.models.find((m) => m.id === modelId) ?? selectedProvider?.models[0],
+    [selectedProvider, modelId]
+  )
+
+  useEffect(() => {
+    if (!session) return
+    fetch('/api/providers')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setConfigured(data?.configured ?? null))
+      .catch(() => setConfigured(null))
+  }, [session])
+
+  const handleProviderChange = (id: string) => {
+    const next = providers.find((p) => p.id === id)
+    setProviderId(id)
+    setModelId(next?.models[0]?.id ?? '')
+  }
+
+  // Keep every option valid for the selected model
+  useEffect(() => {
+    if (!selectedModel || !selectedProvider) return
+    setAspectRatio((prev) => keepOrFirst(selectedModel.aspectRatios, prev))
+    setResolution((prev) => keepOrFirst(selectedModel.resolutions, prev))
+    setDurationSeconds((prev) => keepOrFirst(selectedModel.durations, prev))
+    setNumberOfVideos((prev) => Math.min(Math.max(1, prev), selectedProvider.maxVideos))
+    if (!selectedModel.supportsImage) setConditioningImage(null)
+    if (!selectedModel.supportsNegativePrompt) setNegativePrompt('')
+  }, [selectedModel, selectedProvider])
+
+  const imageBlockedByDuration = Boolean(
+    conditioningImage && selectedModel?.textOnlyDurations?.includes(durationSeconds)
+  )
+
+  const estimatedCost = useMemo<CostEstimate | null>(() => {
+    if (!selectedModel) return null
+    const perVideo = selectedModel.estimateCost({
+      durationSeconds,
+      resolution,
+      audio: selectedModel.supportsAudio && audio,
+    })
+    return { ...perVideo, amount: perVideo.amount * Math.max(1, numberOfVideos) }
+  }, [selectedModel, durationSeconds, resolution, audio, numberOfVideos])
+
+  const providerConfigured = configured ? configured[providerId] !== false : true
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -49,54 +109,6 @@ export default function VideoGenerator() {
       setConditioningImage(file)
     }
   }
-
-  React.useEffect(() => {
-    if (!selectedProvider) {
-      return
-    }
-
-    setNumberOfVideos((prev) => {
-      if (!selectedProvider.capabilities.supportsMultipleVideos) {
-        return 1
-      }
-      const maxVideos = selectedProvider.capabilities.maxVideos || 1
-      return Math.min(Math.max(1, prev), maxVideos)
-    })
-
-    setConditioningImage((prev) =>
-      selectedProvider.capabilities.supportsConditioningImage ? prev : null
-    )
-
-    setNegativePrompt((prev) =>
-      selectedProvider.capabilities.supportsNegativePrompt ? prev : ''
-    )
-
-    setAspectRatio((prev) => {
-      if (selectedProvider.supportedAspectRatios.includes(prev)) {
-        return prev
-      }
-      return selectedProvider.supportedAspectRatios[0] ?? '16:9'
-    })
-
-    setDurationSeconds((prev) => {
-      const allowedDurations = selectedProvider.capabilities.supportedDurations
-      if (allowedDurations.length > 0 && !allowedDurations.includes(prev)) {
-        return allowedDurations[0]
-      }
-      return Math.min(prev, selectedProvider.maxDuration)
-    })
-  }, [selectedProvider])
-
-  const estimatedCostPerVideo = useMemo(() => {
-    if (!selectedProvider) {
-      return 0
-    }
-    return calculateCost(selectedProvider, durationSeconds)
-  }, [selectedProvider, durationSeconds])
-
-  const estimatedTotalCost = useMemo(() => {
-    return estimatedCostPerVideo * Math.max(1, numberOfVideos)
-  }, [estimatedCostPerVideo, numberOfVideos])
 
   const promptInsights = useMemo(() => {
     const trimmed = prompt.trim()
@@ -149,37 +161,60 @@ export default function VideoGenerator() {
         helper:
           promptInsights.score >= 2
             ? 'Strong descriptive prompt'
-            : 'Add more context (≥ 15 words) for cinematic results',
+            : 'Add more context (12+ words) for cinematic results',
       },
       {
-        label: 'Provider limits',
-        ready: Boolean(selectedProvider),
-        helper: selectedProvider
-          ? `Max ${selectedProvider.maxDuration}s • ${selectedProvider.supportedAspectRatios.join(', ')}`
-          : 'Choose a provider',
+        label: 'Provider key',
+        ready: providerConfigured,
+        helper: providerConfigured
+          ? `${selectedProvider?.name ?? 'Provider'} is ready`
+          : `Set ${selectedProvider?.apiKeyEnv[0]} on the server`,
+      },
+      {
+        label: 'Model limits',
+        ready: Boolean(selectedModel) && !imageBlockedByDuration,
+        helper: imageBlockedByDuration
+          ? `${durationSeconds}s clips cannot start from an image`
+          : selectedModel
+          ? `${selectedModel.durations[0]}–${selectedModel.durations[selectedModel.durations.length - 1]}s • ${selectedModel.aspectRatios.join(', ')}`
+          : 'Choose a model',
       },
       {
         label: 'Reference image',
-        ready:
-          !selectedProvider?.capabilities.supportsConditioningImage || Boolean(conditioningImage),
-        helper: selectedProvider?.capabilities.supportsConditioningImage
+        ready: !selectedModel?.supportsImage || Boolean(conditioningImage),
+        helper: selectedModel?.supportsImage
           ? conditioningImage
             ? `${conditioningImage.name} attached`
             : 'Optional but helps with consistency'
-          : 'Not available for this provider',
-      },
-      {
-        label: 'Batch size',
-        ready:
-          !selectedProvider?.capabilities.supportsMultipleVideos ||
-          numberOfVideos <= (selectedProvider?.capabilities.maxVideos ?? 1),
-        helper: selectedProvider?.capabilities.supportsMultipleVideos
-          ? `Up to ${selectedProvider?.capabilities.maxVideos ?? 1} variations`
-          : 'Single video only',
+          : 'Not available for this model',
       },
     ],
-    [promptInsights.score, selectedProvider, conditioningImage, numberOfVideos]
+    [
+      promptInsights.score,
+      providerConfigured,
+      selectedProvider,
+      selectedModel,
+      imageBlockedByDuration,
+      durationSeconds,
+      conditioningImage,
+    ]
   )
+
+  const modelFeatures = useMemo(() => {
+    if (!selectedModel) return []
+    const top = selectedModel.resolutions.includes('4k')
+      ? '4K'
+      : selectedModel.resolutions.includes('1080p')
+      ? '1080p'
+      : selectedModel.resolutions[0]
+    return [
+      selectedModel.supportsImage ? 'Image-to-video' : null,
+      selectedModel.supportsAudio ? 'Native audio' : null,
+      selectedModel.supportsNegativePrompt ? 'Negative prompt' : null,
+      `Up to ${selectedModel.durations[selectedModel.durations.length - 1]}s`,
+      `Up to ${top}`,
+    ].filter((f): f is string => Boolean(f))
+  }, [selectedModel])
 
   if (isPending) {
     return (
@@ -230,29 +265,29 @@ export default function VideoGenerator() {
       setMessage('Please enter a prompt before generating.')
       return
     }
+    if (!selectedModel) {
+      setMessage('Please choose a model.')
+      return
+    }
 
     setIsGenerating(true)
-    setMessage('Generating...')
+    setMessage(`Generating with ${selectedModel.name}. This can take a few minutes...`)
     setVideos([])
 
     const startedAt = Date.now()
-    setGenerationMeta({ provider, startedAt })
+    setGenerationMeta({ provider: providerId, model: selectedModel.id, startedAt })
 
     try {
       const formData = new FormData()
+      formData.append('provider', providerId)
+      formData.append('model', selectedModel.id)
       formData.append('prompt', prompt)
       formData.append('negativePrompt', negativePrompt)
       formData.append('numberOfVideos', numberOfVideos.toString())
       formData.append('aspectRatio', aspectRatio)
       formData.append('durationSeconds', durationSeconds.toString())
-      formData.append('provider', provider)
-
-      if (provider === 'veo-3') {
-        formData.append('veo3Model', veo3Model)
-        formData.append('veo3Resolution', veo3Resolution)
-        formData.append('veo3Audio', veo3Audio.toString())
-      }
-
+      formData.append('resolution', resolution)
+      formData.append('audio', String(selectedModel.supportsAudio && audio))
       if (conditioningImage) {
         formData.append('conditioningImage', conditioningImage)
       }
@@ -261,33 +296,37 @@ export default function VideoGenerator() {
         method: 'POST',
         body: formData,
       })
+      const result = await response.json().catch(() => ({}))
 
       if (!response.ok) {
-        throw new Error('Failed to generate video')
+        throw new Error(result.error || `Request failed with status ${response.status}`)
       }
 
-      const result = await response.json()
       setVideos(result.videos || [])
       setGenerationMeta({
-        provider: result.provider || provider,
+        provider: result.provider || providerId,
+        model: result.model || selectedModel.id,
         cost: result.cost,
         startedAt,
         completedAt: Date.now(),
       })
+      const costNote = result.cost ? ` • ${formatCost(result.cost)}` : ''
       setMessage(
-        result.cost
-          ? `Video generated successfully • ${formatCurrency(result.cost)}`
-          : 'Video generated successfully!'
+        result.warning
+          ? `Video generated successfully${costNote}. ${result.warning}`
+          : `Video generated successfully${costNote}`
       )
     } catch (error) {
       console.error('Error generating video:', error)
+      const reason = error instanceof Error ? error.message : 'Unknown error'
       setGenerationMeta({
-        provider,
+        provider: providerId,
+        model: selectedModel.id,
         startedAt,
         completedAt: Date.now(),
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: reason,
       })
-      setMessage('Failed to generate video. Please try again.')
+      setMessage(`Failed to generate video: ${reason}`)
     } finally {
       setIsGenerating(false)
     }
@@ -326,7 +365,7 @@ export default function VideoGenerator() {
             </div>
           </div>
 
-          {selectedProvider?.capabilities.supportsNegativePrompt && (
+          {selectedModel?.supportsNegativePrompt && (
             <div className="space-y-3 rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
               <label htmlFor="negative-prompt-input" className="text-sm font-semibold text-gray-200">
                 Negative Prompt <span className="text-gray-400 font-normal">(Optional)</span>
@@ -344,57 +383,75 @@ export default function VideoGenerator() {
           )}
 
           <div className="space-y-4 rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <label htmlFor="provider-selection" className="text-sm font-semibold text-gray-200">
-                Video Generation Provider
-              </label>
-              <span className="text-xs text-gray-400">Cost adapts per provider</span>
-            </div>
-            <div className="relative">
-              <select
-                id="provider-selection"
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-                className="w-full appearance-none rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                aria-label="Video generation provider selection"
-              >
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-gray-900 text-white">
-                    {p.name} — ${p.pricing.costPerSecond.toFixed(2)}/sec
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div className="space-y-3">
+                <label htmlFor="provider-selection" className="text-sm font-semibold text-gray-200">
+                  Provider
+                </label>
+                <div className="relative">
+                  <select
+                    id="provider-selection"
+                    value={providerId}
+                    onChange={(e) => handleProviderChange(e.target.value)}
+                    className={selectClass}
+                  >
+                    {providers.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-gray-900 text-white">
+                        {p.name}
+                        {configured && configured[p.id] === false ? ' (no API key)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <Chevron />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <label htmlFor="model-selection" className="text-sm font-semibold text-gray-200">
+                  Model
+                </label>
+                <div className="relative">
+                  <select
+                    id="model-selection"
+                    value={selectedModel?.id ?? ''}
+                    onChange={(e) => setModelId(e.target.value)}
+                    className={selectClass}
+                  >
+                    {selectedProvider?.models.map((m) => (
+                      <option key={m.id} value={m.id} className="bg-gray-900 text-white">
+                        {m.name} ({m.priceLabel})
+                      </option>
+                    ))}
+                  </select>
+                  <Chevron />
+                </div>
               </div>
             </div>
 
-            {selectedProvider && (
+            {selectedProvider && selectedModel && (
               <div className="space-y-3 rounded-xl border border-gray-700/60 bg-gray-900/60 p-4 text-sm text-gray-300">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="text-gray-400">{selectedProvider.description}</span>
-                  <span
-                    className={`rounded-full border px-2 py-1 font-medium ${
-                      selectedProvider.pricing.costPerSecond <= 0.03
-                        ? 'border-green-600/30 bg-green-900/30 text-green-400'
-                        : selectedProvider.pricing.costPerSecond <= 0.05
-                        ? 'border-yellow-600/30 bg-yellow-900/30 text-yellow-400'
-                        : 'border-red-600/30 bg-red-900/30 text-red-400'
-                    }`}
+                <p className="text-xs text-gray-400">
+                  {selectedProvider.description} {selectedModel.description}
+                </p>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-400">
+                  <span>Est. cost: {estimatedCost ? formatCost(estimatedCost) : '—'}</span>
+                  <a
+                    href={selectedProvider.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-300 underline-offset-2 hover:underline"
                   >
-                    ${selectedProvider.pricing.costPerSecond.toFixed(2)}/sec
-                  </span>
+                    Provider docs
+                  </a>
                 </div>
-                <div className="flex flex-wrap items-center justify-between text-xs text-gray-400">
-                  <span>Est. cost: {formatCurrency(estimatedTotalCost)}</span>
-                  {selectedProvider.pricing.freeTier && (
-                    <span className="text-green-400">{selectedProvider.pricing.freeTier.description}</span>
-                  )}
-                </div>
+                {!providerConfigured && (
+                  <p className="rounded-lg border border-yellow-600/40 bg-yellow-900/20 px-3 py-2 text-xs text-yellow-200">
+                    No API key for {selectedProvider.name} on this server. Set{' '}
+                    <code>{selectedProvider.apiKeyEnv[0]}</code> to enable it.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  {selectedProvider.features.map((feature) => (
+                  {modelFeatures.map((feature) => (
                     <span
                       key={feature}
                       className="rounded-full border border-gray-700/60 bg-gray-800/60 px-3 py-1 text-xs text-gray-200"
@@ -411,37 +468,11 @@ export default function VideoGenerator() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-white">Creative controls</h3>
               <p className="text-xs text-gray-400">
-                We only render controls the selected provider supports.
+                We only render controls the selected model supports.
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {selectedProvider?.capabilities.supportsMultipleVideos && (
-                <div className="space-y-3">
-                  <label htmlFor="number-of-videos" className="text-sm font-semibold text-gray-200">
-                    Number of Videos
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="number-of-videos"
-                      type="number"
-                      min={1}
-                      max={selectedProvider.capabilities.maxVideos || 1}
-                      value={numberOfVideos}
-                      onChange={(e) => setNumberOfVideos(Math.max(1, Number(e.target.value)))}
-                      className="w-full rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 pr-16 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                      aria-label="Number of videos to generate"
-                    />
-                    <div className="pointer-events-none absolute right-4 top-1/2 flex -translate-y-1/2 items-center space-x-2 text-xs text-gray-400">
-                      <span>max {selectedProvider.capabilities.maxVideos}</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    Generate up to {selectedProvider.capabilities.maxVideos} variations in one run.
-                  </p>
-                </div>
-              )}
-
               <div className="space-y-3">
                 <label htmlFor="aspect-ratio" className="text-sm font-semibold text-gray-200">
                   Aspect Ratio
@@ -451,25 +482,15 @@ export default function VideoGenerator() {
                     id="aspect-ratio"
                     value={aspectRatio}
                     onChange={(e) => setAspectRatio(e.target.value)}
-                    className="w-full appearance-none rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                    aria-label="Aspect ratio"
+                    className={selectClass}
                   >
-                    {selectedProvider?.supportedAspectRatios.map((ratio) => (
+                    {selectedModel?.aspectRatios.map((ratio) => (
                       <option key={ratio} value={ratio} className="bg-gray-900 text-white">
                         {ratio}
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-xs text-gray-400">
-                  <span>Landscape</span>
-                  <span className="font-semibold text-blue-400">{aspectRatio}</span>
-                  <span>Portrait</span>
+                  <Chevron />
                 </div>
               </div>
 
@@ -477,51 +498,92 @@ export default function VideoGenerator() {
                 <label htmlFor="duration-seconds" className="text-sm font-semibold text-gray-200">
                   Duration
                 </label>
-                {selectedProvider?.capabilities.supportedDurations.length ? (
-                  <div className="relative">
-                    <select
-                      id="duration-seconds"
-                      value={durationSeconds}
-                      onChange={(e) => setDurationSeconds(Number(e.target.value))}
-                      className="w-full appearance-none rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 pr-10 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                      aria-label="Video duration in seconds"
-                    >
-                      {selectedProvider.capabilities.supportedDurations.map((duration) => (
-                        <option key={duration} value={duration} className="bg-gray-900 text-white">
-                          {duration}s
-                        </option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                      <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                ) : (
-                  <input
+                <div className="relative">
+                  <select
                     id="duration-seconds"
-                    type="number"
-                    min={3}
-                    max={selectedProvider?.maxDuration ?? 10}
                     value={durationSeconds}
-                    onChange={(e) => setDurationSeconds(Math.max(3, Number(e.target.value)))}
-                    className="w-full rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                    aria-label="Video duration in seconds"
-                  />
+                    onChange={(e) => setDurationSeconds(Number(e.target.value))}
+                    className={selectClass}
+                  >
+                    {selectedModel?.durations.map((duration) => (
+                      <option key={duration} value={duration} className="bg-gray-900 text-white">
+                        {duration}s
+                      </option>
+                    ))}
+                  </select>
+                  <Chevron />
+                </div>
+                {imageBlockedByDuration && (
+                  <p className="text-xs text-yellow-300">
+                    {selectedModel?.name} cannot start a {durationSeconds}s clip from an image. Pick a
+                    shorter duration or remove the image.
+                  </p>
                 )}
-                <div className="flex items-center justify-between text-xs text-gray-400">
-                  <span>3s</span>
-                  <span className="font-semibold text-blue-400">{durationSeconds}s</span>
-                  <span>{selectedProvider?.maxDuration ?? 10}s</span>
+              </div>
+
+              <div className="space-y-3">
+                <label htmlFor="resolution" className="text-sm font-semibold text-gray-200">
+                  Resolution
+                </label>
+                <div className="relative">
+                  <select
+                    id="resolution"
+                    value={resolution}
+                    onChange={(e) => setResolution(e.target.value)}
+                    className={selectClass}
+                  >
+                    {selectedModel?.resolutions.map((res) => (
+                      <option key={res} value={res} className="bg-gray-900 text-white">
+                        {res === '4k' ? '4K' : res}
+                      </option>
+                    ))}
+                  </select>
+                  <Chevron />
                 </div>
               </div>
 
-              {selectedProvider?.capabilities.supportsConditioningImage && (
+              <div className="space-y-3">
+                <label htmlFor="number-of-videos" className="text-sm font-semibold text-gray-200">
+                  Variations
+                </label>
+                <div className="relative">
+                  <select
+                    id="number-of-videos"
+                    value={numberOfVideos}
+                    onChange={(e) => setNumberOfVideos(Number(e.target.value))}
+                    className={selectClass}
+                  >
+                    {Array.from({ length: selectedProvider?.maxVideos ?? 1 }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n} className="bg-gray-900 text-white">
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  <Chevron />
+                </div>
+                <p className="text-xs text-gray-400">Each variation is a separate, billed generation.</p>
+              </div>
+
+              {selectedModel?.supportsAudio && (
                 <div className="space-y-3">
-                  <label className="text-sm font-semibold text-gray-200">
-                    Reference Image <span className="text-gray-400 font-normal">(Optional)</span>
+                  <span className="text-sm font-semibold text-gray-200">Audio</span>
+                  <label className="flex items-center space-x-2 text-sm text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={audio}
+                      onChange={(e) => setAudio(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-blue-500 focus:ring-blue-500/60"
+                    />
+                    <span>Generate synchronized audio (costs more)</span>
                   </label>
+                </div>
+              )}
+
+              {selectedModel?.supportsImage && (
+                <div className="space-y-3">
+                  <span className="text-sm font-semibold text-gray-200">
+                    Reference Image <span className="text-gray-400 font-normal">(Optional, max 5 MB)</span>
+                  </span>
                   <label
                     htmlFor="conditioning-image-input"
                     className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-gray-600/70 bg-gray-900/60 p-4 text-center text-sm text-gray-300 transition hover:border-solid hover:border-blue-500/60 hover:bg-gray-900"
@@ -531,12 +593,12 @@ export default function VideoGenerator() {
                       id="conditioning-image-input"
                       onChange={handleImageChange}
                       className="hidden"
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/webp"
                     />
                     <svg className="mb-2 h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
-                    <span>Upload reference image</span>
+                    <span>Upload a start frame</span>
                   </label>
                   {conditioningImage && (
                     <div className="flex items-center justify-between rounded-xl border border-green-600/40 bg-green-900/20 px-4 py-2 text-xs text-green-200">
@@ -552,101 +614,6 @@ export default function VideoGenerator() {
                   )}
                 </div>
               )}
-
-              {provider === 'veo-3' && (
-                <>
-                  <div className="space-y-3">
-                    <label htmlFor="veo3-model" className="text-sm font-semibold text-gray-200">
-                      VEO3 Model
-                    </label>
-                    <select
-                      id="veo3-model"
-                      value={veo3Model}
-                      onChange={(e) => setVeo3Model(e.target.value)}
-                      className="w-full rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                      aria-label="VEO3 model selection"
-                    >
-                      <option value="veo3-fast">VEO3 Fast (10-15 credits)</option>
-                      <option value="veo3-quality">VEO3 Quality (20-30 credits)</option>
-                    </select>
-                    <p className="text-xs text-gray-400">
-                      {veo3Model === 'veo3-fast'
-                        ? 'Faster generations with slightly softer detail.'
-                        : 'Highest fidelity with longer wait times.'}
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label htmlFor="veo3-resolution" className="text-sm font-semibold text-gray-200">
-                      Resolution
-                    </label>
-                    <select
-                      id="veo3-resolution"
-                      value={veo3Resolution}
-                      onChange={(e) => setVeo3Resolution(e.target.value)}
-                      className="w-full rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                      aria-label="VEO3 resolution"
-                    >
-                      <option value="720p">720p (Standard)</option>
-                      <option value="1080p">1080p (HD)</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-sm font-semibold text-gray-200">Audio Generation</label>
-                    <label className="flex items-center space-x-2 text-sm text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={veo3Audio}
-                        onChange={(e) => setVeo3Audio(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-600 bg-gray-900 text-blue-500 focus:ring-blue-500/60"
-                      />
-                      <span>Generate synchronized audio (+5 credits)</span>
-                    </label>
-                  </div>
-                </>
-              )}
-
-              {selectedProvider?.capabilities.supportsResolution &&
-                selectedProvider.capabilities.supportedResolutions.length > 0 &&
-                provider !== 'veo-3' && (
-                  <div className="space-y-3">
-                    <label htmlFor="resolution" className="text-sm font-semibold text-gray-200">
-                      Resolution
-                    </label>
-                    <select
-                      id="resolution"
-                      className="w-full rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                      aria-label="Video resolution"
-                    >
-                      {selectedProvider.capabilities.supportedResolutions.map((resolution) => (
-                        <option key={resolution} value={resolution} className="bg-gray-900 text-white">
-                          {resolution}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-              {selectedProvider?.capabilities.supportsFPS &&
-                selectedProvider.capabilities.supportedFPS.length > 0 && (
-                  <div className="space-y-3">
-                    <label htmlFor="fps" className="text-sm font-semibold text-gray-200">
-                      Frame Rate (FPS)
-                    </label>
-                    <select
-                      id="fps"
-                      className="w-full rounded-2xl border border-gray-700/60 bg-gray-900/60 p-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/60"
-                      aria-label="Video frame rate"
-                    >
-                      {selectedProvider.capabilities.supportedFPS.map((fps) => (
-                        <option key={fps} value={fps} className="bg-gray-900 text-white">
-                          {fps} FPS
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
             </div>
           </div>
 
@@ -654,26 +621,21 @@ export default function VideoGenerator() {
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isGenerating}
+              disabled={isGenerating || imageBlockedByDuration || !providerConfigured}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-blue-600 to-purple-600 py-4 text-center text-base font-semibold text-white shadow-lg transition hover:from-blue-700 hover:to-purple-700 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isGenerating ? (
                 <>
                   <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-white" />
-                  Generating with {selectedProvider?.name ?? provider}...
+                  Generating with {selectedModel?.name ?? providerId}...
                 </>
               ) : (
-                <>
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Generate with {selectedProvider?.name ?? provider}
-                </>
+                <>Generate with {selectedModel?.name ?? providerId}</>
               )}
             </button>
             <p className="mt-3 text-center text-xs text-gray-400">
-              Estimated total cost {formatCurrency(estimatedTotalCost)} • {numberOfVideos} video(s) ×{' '}
-              {durationSeconds}s
+              Estimated total {estimatedCost ? formatCost(estimatedCost) : '—'} • {numberOfVideos} video(s) ×{' '}
+              {durationSeconds}s at {resolution === '4k' ? '4K' : resolution}
             </p>
           </div>
         </section>
@@ -682,7 +644,7 @@ export default function VideoGenerator() {
           <div className="rounded-2xl border border-gray-700/60 bg-gray-900/40 p-6 backdrop-blur">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-wide text-gray-400">Better Auth session</p>
+                <p className="text-xs uppercase tracking-wide text-gray-400">Signed in as</p>
                 <p className="text-lg font-semibold text-white">
                   {session.user?.name ?? session.user?.email}
                 </p>
@@ -697,18 +659,16 @@ export default function VideoGenerator() {
                 <dd className="font-medium text-white">{selectedProvider?.name ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-gray-400">Cost / sec</dt>
-                <dd>{selectedProvider ? `$${selectedProvider.pricing.costPerSecond.toFixed(2)}` : '—'}</dd>
+                <dt className="text-gray-400">Model</dt>
+                <dd className="font-medium text-white">{selectedModel?.name ?? '—'}</dd>
               </div>
               <div>
-                <dt className="text-gray-400">Max duration</dt>
-                <dd>{selectedProvider?.maxDuration ?? 0}s</dd>
+                <dt className="text-gray-400">Pricing</dt>
+                <dd>{selectedModel?.priceLabel ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-gray-400">Aspect ratios</dt>
-                <dd className="text-xs">
-                  {selectedProvider?.supportedAspectRatios?.join(', ') ?? '—'}
-                </dd>
+                <dd className="text-xs">{selectedModel?.aspectRatios.join(', ') ?? '—'}</dd>
               </div>
             </dl>
             {generationMeta?.completedAt && (
@@ -721,7 +681,7 @@ export default function VideoGenerator() {
                 </p>
                 {generationMeta.cost && (
                   <p className="text-xs text-gray-400">
-                    Actual cost: {formatCurrency(generationMeta.cost)}
+                    Reported cost: {formatCost(generationMeta.cost)}
                   </p>
                 )}
               </div>
@@ -750,11 +710,11 @@ export default function VideoGenerator() {
           </div>
 
           <div className="rounded-2xl border border-blue-600/40 bg-linear-to-br from-blue-900/40 to-purple-900/30 p-6 text-sm text-blue-50">
-            <h3 className="text-base font-semibold text-white">Tips & troubleshooting</h3>
+            <h3 className="text-base font-semibold text-white">Tips</h3>
             <ul className="mt-4 space-y-3 text-sm">
-              <li>• If something looks off after the Better Auth migration, sign out/in once.</li>
-              <li>• Ensure the provider API key exists before hitting generate.</li>
-              <li>• Prefer longer prompts with camera moves for the best motion cues.</li>
+              <li>• Download clips you want to keep. Runway and Luma links expire after about an hour.</li>
+              <li>• Veo 3.1 Lite or Wan 3 are cheap for drafting a prompt before a 1080p or 4K run.</li>
+              <li>• Name the camera move, lighting and pacing in the prompt for better motion.</li>
             </ul>
           </div>
         </aside>
@@ -821,4 +781,3 @@ export default function VideoGenerator() {
     </div>
   )
 }
-
