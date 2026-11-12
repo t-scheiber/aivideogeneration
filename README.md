@@ -1,262 +1,123 @@
-# AI Video Generation Tool
+# AI Video Generation
 
-A comprehensive Next.js application for generating high-quality AI videos for web project hero sections and other creative needs. Built because I needed a reliable tool to create AI videos for different web projects, so I created my own multi-provider solution.
+A Next.js app that generates short videos through three provider APIs: Google Veo (via veo3gen), Runway and Luma. It covers ten models, shows only the options the selected model accepts, and prints a cost estimate before each run. Live at [aivideogeneration.thomasscheiber.com](https://aivideogeneration.thomasscheiber.com).
 
-## 🎯 Why I Built This
+I built it to make hero-section and background clips for my own web projects.
 
-I was working on multiple web projects and needed AI-generated videos for hero sections, but existing tools were too expensive, too limited or unreliable. So I built my own. It talks to three provider APIs and covers ten current video models, and the interface only shows the options the chosen model supports.
+Every generation is a billed call to the provider. The app never starts one on its own.
 
-- **Flexibility**: Pick the provider and model that fit the project and budget
-- **Cost control**: See an estimate in dollars or credits before you generate
-- **No guesswork**: Durations, aspect ratios, resolutions and audio follow each model's real limits
-- **Easy to extend**: Models live in one catalog file (`lib/video-providers.ts`)
+## Providers and models
 
-## ✨ Features
+This table mirrors `lib/video-providers.ts`. A provider reads the first variable in its list that is set.
 
-### 🎬 **Providers and models**
+| Provider | Models | Environment variables |
+|----------|--------|-----------------------|
+| Google Veo 3.1 via [veo3gen.app](https://www.imaginary.app/docs) | Veo 3.1 Fast, Veo 3.1 Quality, Veo 3.1 Lite | `VEO3_API_KEY` |
+| [Runway API](https://docs.dev.runwayml.com/guides/models/) | Gen-4.5, Veo 3.1, Veo 3.1 Fast, Kling 4, Seedance 2.5, Wan 3 | `RUNWAYML_API_SECRET`, `RUNWAYML_API_KEY` |
+| [Luma Agents API](https://docs.agents.lumalabs.ai/guides/videos/generation) | Ray 3.2 | `LUMA_AGENTS_API_KEY`, `LUMA_API_KEY` |
 
-| Provider | Models | Key variable |
-|----------|--------|--------------|
-| **Google Veo 3.1 via [veo3gen.app](https://www.imaginary.app/docs)** (default) | Veo 3.1 Fast, Veo 3.1 Quality, Veo 3.1 Lite | `VEO3_API_KEY` |
-| **[Runway API](https://docs.dev.runwayml.com/guides/models/)** | Gen-4.5, Veo 3.1, Veo 3.1 Fast, Kling 4, Seedance 2.5, Wan 3 | `RUNWAYML_API_SECRET` |
-| **[Luma Agents API](https://docs.agents.lumalabs.ai/guides/videos/generation)** | Ray 3.2 | `LUMA_AGENTS_API_KEY` |
+| Model | Provider | Durations | Aspect ratios | Resolutions | Audio | Price label |
+|-------|----------|-----------|---------------|-------------|-------|-------------|
+| Veo 3.1 Fast | veo3gen | 8s | 16:9, 9:16 | 720p, 1080p, 4k | yes | 6 to 22 credits/clip |
+| Veo 3.1 Quality | veo3gen | 8s | 16:9, 9:16 | 720p, 1080p, 4k | yes | 13 to 38 credits/clip |
+| Veo 3.1 Lite | veo3gen | 8s | 16:9, 9:16 | 720p, 1080p | yes | 2 to 5 credits/clip |
+| Gen-4.5 | Runway | 2 to 10s | 16:9, 9:16 | 720p | no | $0.12/s |
+| Veo 3.1 | Runway | 4, 6, 8s | 16:9, 9:16 | 720p, 1080p | yes | from $0.20/s |
+| Veo 3.1 Fast | Runway | 4, 6, 8s | 16:9, 9:16 | 720p, 1080p | yes | from $0.10/s |
+| Kling 4 | Runway | 3 to 30s | 16:9, 9:16, 1:1 | 720p, 1080p | no | from $0.157/s |
+| Seedance 2.5 | Runway | 5, 10, 15, 20, 25, 30s | 16:9, 9:16, 1:1 | 720p, 1080p | yes | from $0.20/s |
+| Wan 3 | Runway | 2 to 30s | 16:9, 9:16, 1:1 | 720p, 1080p | yes | from $0.05/s |
+| Ray 3.2 | Luma | 5, 10s | 16:9, 9:16, 1:1, 4:3, 3:4, 21:9 | 720p, 1080p, 540p, 360p | no | 20 to 1200 credits/clip |
 
-> **OpenAI Sora was removed.** OpenAI shut down the Sora 2 models and the Videos API on September 24, 2026. Veo 3.1 (through veo3gen or Runway) covers the same text-to-video and image-to-video jobs.
+Every model accepts a start image, except that 10s Ray 3.2 clips cannot use one. Negative prompts work on the Veo models. Up to 4 variations per run, and each one is a separate billed generation.
 
-### 🧠 **Adaptive interface**
+## How it works
 
-- **Model picker**: Choose a provider, then one of its models
-- **Valid options only**: Switching models resets any duration, aspect ratio or resolution the new model does not accept
-- **Server-side checks**: The API route validates every request against the same catalog before calling a provider
-- **Cost estimate**: Runway models show dollars per second; veo3gen and Luma show credits per clip
-- **Key status**: Providers with neither your own key nor a server key are marked and cannot be submitted
-- **Bring your own key**: Guests paste their own provider keys, which stay in their browser (see [Guest mode](#guest-mode-bring-your-own-key))
+### The catalog drives the interface and the server
 
-### 🎯 **Generation options**
+`lib/video-providers.ts` holds one entry per model: allowed durations, aspect ratios and resolutions, whether it supports audio, a start image or a negative prompt, and an `estimateCost` function. `components/VideoGenerator.tsx` renders only those options and resets a value when you switch to a model that does not accept it. `validateRequest` in `lib/video-provider-service.ts` checks every request against the same catalog before any provider is called, so a hand-written request cannot pick an unsupported combination.
 
-- **Aspect ratios**: 16:9 and 9:16 everywhere; 1:1 on Kling 4, Seedance 2.5 and Wan 3; 4:3, 3:4 and 21:9 on Ray 3.2
-- **Durations**: 8s on veo3gen, 4/6/8s for Veo on Runway, 2–10s on Gen-4.5, up to 30s on Kling 4, Seedance 2.5 and Wan 3, 5s or 10s on Ray 3.2
-- **Resolution**: 360p to 1080p, plus 4K on Veo 3.1 Fast and Quality through veo3gen
-- **Native audio**: Veo 3.1, Seedance 2.5 and Wan 3
-- **Image-to-video**: Upload a start frame (JPEG, PNG or WebP, up to 5 MB)
-- **Negative prompts**: Veo 3.1 models
-- **Variations**: Up to 4 per run, each one a separate billed generation
+Adding a model means adding an entry to the catalog. If its provider already has a runner in `video-provider-service.ts`, nothing else changes.
 
-## 🚀 Quick Start
+### Cost estimate
 
-1. **Prerequisites:**
-   - **Bun 1.4+** installed ([get Bun](https://bun.sh))
-   - Google OAuth credentials (for authentication)
+Each model carries its own pricing rule:
 
-2. **Install dependencies:**
+- Runway models multiply a per-second rate by the duration. Veo 3.1 and Veo 3.1 Fast have a higher rate with audio.
+- veo3gen looks up credits per clip by model, resolution and audio in a table copied from the provider's docs.
+- Luma looks up credits per clip by resolution and duration.
 
-   ```bash
-   bun install
-   ```
+The UI multiplies the per-clip figure by the number of variations and shows it before you press Generate. After a run, the server sums the cost each provider reports (Runway credits at $0.01 each, veo3gen and Luma credits as returned) and the page shows it as "Reported cost". The estimate and the reported cost can differ, and several price labels in the catalog say "from".
 
-3. **Set up environment variables:**
+### Provider calls and errors
 
-   ```bash
-   cp env.example .env.local
-   ```
+Each provider has a runner that submits a job, then polls its status endpoint every 10 seconds for up to 10 minutes. The runners map onto the three provider APIs:
 
-   Add your configuration:
+- veo3gen: `POST /api/generate`, then `GET /api/status/{taskId}`.
+- Runway: `text_to_video` or `image_to_video`, then `GET /v1/tasks/{id}`. The pixel size sent depends on model, aspect ratio and resolution.
+- Luma: `POST /generations`, then `GET /generations/{id}`.
 
-   ```bash
-   # Authentication (Better Auth)
-   GOOGLE_CLIENT_ID=your-google-client-id
-   GOOGLE_CLIENT_SECRET=your-google-client-secret
-   AUTH_SECRET=your-random-secret-key
-   BETTER_AUTH_SECRET=your-random-secret-key
-   NEXT_PUBLIC_APP_URL=http://localhost:3000
+Variations run in parallel with `Promise.allSettled`. If some fail, the route returns the clips that finished plus a warning such as "1 of 3 variations failed". If all fail, it returns the first failure.
 
-   # Video generation API keys (set the ones you use)
-   VEO3_API_KEY=veo_your-key            # veo3gen.app: Veo 3.1 Fast, Quality, Lite
-   RUNWAYML_API_SECRET=your-key         # Runway API: Gen-4.5, Veo 3.1, Kling 4, Seedance 2.5, Wan 3
-   LUMA_AGENTS_API_KEY=your-key         # Luma Agents API: Ray 3.2
-   ```
+HTTP errors from a provider become readable messages: 401 says to check the key, 402 says the account is out of credits, 429 says the rate limit was hit. Other statuses include the status code, followed by the first 500 characters of the provider's response body.
 
-4. **Run the development server:**
+When a generation fails, the route answers with status 422. A comment in the route explains why: Cloudflare replaces 502 bodies from the origin with its own error page, which hides the reason (a bad key, no credits). Unexpected exceptions return a generic 500.
 
-   ```bash
-   bun run dev
-   ```
+### Access and guest mode
 
-5. **Open your browser:**
-   Navigate to [http://localhost:3000](http://localhost:3000) and sign in with Google
+Sign-in uses Better Auth with Google OAuth and a SQLite file through Node's built-in `node:sqlite`. `instrumentation.ts` creates or updates the auth tables when the server starts, so a new volume needs no migration step. `ALLOWED_EMAILS` is a comma-separated allowlist. Only allowlisted accounts can use the server's provider keys. If it is unset, any Google account is allowed, which is fine for local work and not for a public deployment.
 
-## 💰 Models, limits and pricing
+Guest mode is on unless `GUEST_MODE` is `off`, `false`, `0` or `no`. A guest pastes a provider key into the "Your API keys" panel:
 
-Prices as listed by each provider in November 2026. Runway lists "from" prices; higher resolutions and audio can cost more.
+- The key is saved in the browser's localStorage under `aivideo.providerKeys.v1` (`lib/browser-keys.ts`).
+- On Generate, the browser sends only the selected provider's key, in the `x-provider-api-key` header. The header must be visible ASCII and at most 512 characters.
+- The route uses the key for that one request. It does not write it to the database and its log line records only "own key" or "server key".
+- `/api/providers` reports which providers have a server key, and reports `false` for every provider unless the caller is an allowlisted member. A guest never gets a server key.
 
-| Model | Provider | Durations | Max resolution | Audio | Price |
-|-------|----------|-----------|----------------|-------|-------|
-| Veo 3.1 Lite | veo3gen | 8s | 1080p | ✅ | 2–5 credits/clip |
-| Veo 3.1 Fast | veo3gen | 8s | 4K | ✅ | 6–22 credits/clip |
-| Veo 3.1 Quality | veo3gen | 8s | 4K | ✅ | 13–38 credits/clip |
-| Gen-4.5 | Runway | 2–10s | 720p | ❌ | $0.12/s |
-| Veo 3.1 | Runway | 4, 6, 8s | 1080p | ✅ | from $0.20/s |
-| Veo 3.1 Fast | Runway | 4, 6, 8s | 1080p | ✅ | from $0.10/s |
-| Kling 4 | Runway | 3–30s | 1080p | ❌ | from $0.157/s |
-| Seedance 2.5 | Runway | 5–30s | 1080p | ✅ | from $0.20/s |
-| Wan 3 | Runway | 2–30s | 1080p | ✅ | from $0.05/s |
-| Ray 3.2 | Luma | 5s, 10s | 1080p | ❌ | 20–1200 credits/clip |
+A visitor's key is still readable by anyone with access to that browser profile or by script on the page, so set a spending limit with each provider.
 
-Ray 3.2 cannot start a 10s clip from an image. Runway and Luma video links expire after about an hour, so download the clips you want to keep.
+## Stack
 
-## 🎬 Perfect for Web Projects
+Versions come from `package.json`.
 
-This tool is specifically designed for web developers and designers who need:
+- Next.js 16.4.6 (App Router), React 19.3.1, TypeScript 6.0.3
+- Tailwind CSS 4.3.5 through `@tailwindcss/postcss`
+- Better Auth 1.7.21
+- ESLint 10 with `eslint-config-next`
+- Bun as package manager (`bun.lock`), Node 22 at runtime (the version `nixpacks.toml` installs), because auth uses `node:sqlite`
 
-- **Hero section videos** for landing pages
-- **Background videos** for websites
-- **Product demos** and showcases
-- **Social media content** for marketing
-- **Prototype videos** for client presentations
+TypeScript is held at 6.x. TypeScript 7 makes `typescript-eslint` throw at startup, so `bun run lint` fails until that package supports it.
 
-### 🧠 **Why the Smart UI Matters**
+## Run it locally
 
-Unlike other tools that show all options regardless of what actually works, this app:
-
-- **Prevents Frustration**: No more trying features that don't work with your chosen provider
-- **Saves Time**: No need to research each provider's limitations
-- **Reduces Errors**: Invalid combinations are automatically prevented
-- **Improves Results**: You only see options that will actually work
-- **Saves Money**: Accurate cost estimation prevents unexpected charges
-
-## 🏗️ Project Structure
-
-```text
-├── app/
-│   ├── api/
-│   │   ├── auth/[...all]/route.ts   # Better Auth API handler
-│   │   ├── generate-video/route.ts   # Validates and runs a generation
-│   │   └── providers/route.ts        # Reports which server keys the caller may use
-│   ├── auth/
-│   │   ├── signin/page.tsx          # Sign-in page
-│   │   └── error/page.tsx           # Auth error page
-│   ├── globals.css                  # Global styles
-│   ├── layout.tsx                   # Root layout
-│   └── page.tsx                     # Home page
-├── components/
-│   ├── ApiKeysPanel.tsx             # Saves and removes your own provider keys
-│   └── VideoGenerator.tsx           # Main video generation component
-├── lib/
-│   ├── auth.ts                      # Better Auth configuration
-│   ├── auth-client.ts               # Client-side auth utilities
-│   ├── auth-server.ts              # Server-side auth utilities
-│   ├── browser-keys.ts              # Your provider keys in localStorage
-│   ├── byok.ts                      # Key header name and format check
-│   ├── video-providers.ts           # Provider and model catalog
-│   └── video-provider-service.ts    # Provider API calls and polling
-├── proxy.ts                         # Next.js middleware for route protection
-├── next.config.mjs                  # Next.js configuration
-├── tailwind.config.cjs              # Tailwind CSS configuration
-└── tsconfig.json                    # TypeScript configuration
+```bash
+bun install
+cp env.example .env.local
+bun run dev
 ```
 
-## 🎯 How to Use
+Fill in `.env.local` first. The variables in `env.example`:
 
-### **Smart Provider Selection**
+| Variable | Purpose |
+|----------|---------|
+| `BETTER_AUTH_SECRET` or `AUTH_SECRET` | Signs sessions |
+| `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL` | Base URL, default `http://localhost:3000` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth |
+| `ALLOWED_EMAILS` | Accounts allowed to use server keys |
+| `GUEST_MODE` | Set to `off` to require sign-in |
+| `AUTH_DB_PATH` | SQLite file, default `.better-auth.db` in the working directory |
+| `VEO3_API_KEY`, `RUNWAYML_API_SECRET`, `LUMA_AGENTS_API_KEY` | Provider keys, see the table above |
 
-1. **Choose your provider** - The UI automatically adapts to show only supported features
-2. **See real-time cost estimation** - Get accurate pricing based on your selections
-3. **Understand limitations** - UI clearly shows what each provider can and cannot do
+Scripts: `bun run dev` (Next.js with Turbopack), `bun run build`, `bun run start`, `bun run lint`. The repo has no test suite.
 
-### **Intelligent Video Generation**
+`GET /api/health` returns `{"status":"ok"}` and needs no session.
 
-1. **Enter a descriptive prompt** for your video
-2. **Add negative prompts** (if supported by your provider)
-3. **Select aspect ratio and duration** - Only supported options are shown
-4. **Upload reference images** (if supported by your provider)
-5. **Choose resolution and audio** (if the model supports them)
-6. **Pick how many variations** to generate
-7. **Download and use** in your web projects
+## Deployment
 
-### **🎨 Smart UI Features**
+`nixpacks.toml` installs Node 22 and Bun, runs `bun run build` and starts with `bunx next start -H 0.0.0.0`. Point `AUTH_DB_PATH` at a persistent volume, otherwise users and sessions are lost on each redeploy.
 
-- **Dynamic Controls**: Options appear/disappear based on provider capabilities
-- **Auto-Validation**: Invalid selections are automatically corrected
-- **Capability Indicators**: Clear visual cues about what each provider supports
-- **Cost Transparency**: Real-time cost updates as you change settings
+## License
 
-## 🛠️ Technologies Used
+MIT, see [LICENSE](LICENSE).
 
-- **Next.js 16** - React framework with App Router and Turbopack
-- **React 19** - Modern UI components with hooks
-- **TypeScript** - Full type safety across all providers
-- **Tailwind CSS 4** - Responsive, modern styling
-- **Bun 1.4** - Package manager and runtime
-- **Better Auth** - Modern authentication with Google OAuth
-- **SQLite** - Lightweight database for Better Auth sessions
-- **Model catalog** - One file describes every provider and model; UI and API both read it
-- **Capability-Based UI** - Dynamic controls that adapt to provider limitations
-- **Real-time Cost Estimation** - Accurate pricing based on actual API costs
-- **Smart Validation** - Automatic value adjustment when switching providers
-
-## 📈 Use Cases
-
-- **Landing Page Heroes**: Create stunning background videos
-- **Product Showcases**: Demonstrate features with AI-generated content
-- **Marketing Campaigns**: Generate social media content at scale
-- **Client Presentations**: Create professional demo videos
-- **Prototype Development**: Visualize concepts before production
-
-## 🔐 Authentication
-
-This app uses **Better Auth** with Google OAuth for secure authentication:
-
-- **Sign in**: Click "Sign in with Google" on the home page
-- **Session management**: Automatic session handling with secure cookies
-- **Route protection**: Signed-in generations need an allowlisted account (`ALLOWED_EMAILS`); everyone else needs their own key
-- **Database**: SQLite database (`.better-auth.db`) stores user sessions
-- **Code quality**: ESLint enforces code quality and formatting
-
-### Guest mode (bring your own key)
-
-Visitors who are not signed in can still use the studio with their own veo3gen, Runway or Luma key. I added this so people can try the app without me paying for their clips.
-
-- Keys are saved in the browser's localStorage under `aivideo.providerKeys.v1`. The **Your API keys** panel saves, replaces and forgets them.
-- When you click Generate, the browser sends only the selected provider's key, in the `x-provider-api-key` header. The server uses it for that one generation and does not store or log it.
-- The providers block calls from browsers, so the request has to go through this server. Only serve the app over HTTPS.
-- Guests never get the server's keys. Signed-in members fall back to a server key when they have not saved their own, and their own key wins when they have.
-- Anyone with access to the browser profile, or script running on the page, can read saved keys. Set a spending limit with each provider.
-- Set `GUEST_MODE=off` to turn guest mode off and require sign-in again.
-
-## 🤝 Contributing
-
-This project was built to solve a real need for AI video generation in web development. We welcome contributions!
-
-### How to Contribute
-
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit your changes**: `git commit -m 'Add amazing feature'`
-4. **Push to the branch**: `git push origin feature/amazing-feature`
-5. **Open a Pull Request**
-
-### Development Setup
-
-1. Clone the repository
-2. Install dependencies: `bun install`
-3. Set up environment variables (copy `env.example` to `.env.local` and fill in your keys)
-4. Run development server: `bun run dev`
-5. Sign in with Google OAuth to start generating videos
-
-## 📄 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-### What this means
-
-- ✅ **Free to use** for personal and commercial projects
-- ✅ **Free to modify** and distribute
-- ✅ **Free to sell** products based on this code
-- ✅ **Attribution appreciated** but not required
-- ✅ **No warranty** - use at your own risk
-
-> **Note**: Users are responsible for complying with their chosen AI providers' terms of service when using the APIs.
-
-## 🌟 Star this Repository
-
-If you find this project helpful, please give it a star! It helps others discover the project and shows your support for open-source AI video generation tools.
+Anyone who uses the provider APIs through this app has to follow those providers' terms.
